@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#141a12">
+<meta name="description" content="Power Grid: a Bitcoin mining plant tycoon. Build power, mine blocks, survive halvings, reach free energy.">
+<title>Power Grid</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Rubik:wght@400;500;600;700&family=Courier+Prime:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css?v=25">
+</head>
+<body>
+<canvas id="view" aria-label="The plant, seen from above" role="img"></canvas>
+
+<div id="hud" class="card" hidden>
+  <button class="cell" id="h-cash" title="Cash"><span class="lbl">Cash</span><span class="num v" style="color:var(--cash)">$0</span></button>
+  <button class="cell" id="h-btc" title="Sell bitcoin"><span class="lbl">Bitcoin</span><span class="num v" style="color:var(--btc)">₿ 0</span></button>
+  <button class="cell" id="h-net" title="What is this?"><span class="lbl">Net / day</span><span class="num v">$0</span></button>
+  <button class="cell" id="h-pow" title="Toggle the grid view"><span class="lbl">Power</span><span class="num v" style="color:var(--volt)">0 / 0 kW</span></button>
+  <button class="cell" id="h-px" title="What is this?"><span class="lbl">BTC</span><span class="num v" style="color:var(--btc)">$0</span></button>
+</div>
+
+<button id="pill" class="pill" hidden aria-label="Open the network: mempool, blocks and charts"><span id="p-text"></span><span class="bar"><i id="p-bar"></i></span><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 7h12M2 11h9M2 15h5"/></svg></button>
+
+<div id="speed" class="pill" hidden>
+  <button class="ib" id="b-play" aria-label="Pause"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3v10M11 3v10"/></svg></button>
+  <label class="spd" title="Game speed"><input type="range" id="spd" min="0" max="100" step="1" value="31" aria-label="Game speed" aria-describedby="spd-t"><span id="spd-t" class="num">36 s a day</span></label>
+  <button class="ib" id="b-music" aria-label="Music and voice settings"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 12V3l8-2v9M3 12h3v3H3zM11 10h3v3h-3z"/></svg></button>
+  <button class="ib" id="b-sites" aria-label="Your sites around the world" hidden><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a7 7 0 1 0 .01 0M1 8h14M8 1c-3.5 3.5-3.5 10.5 0 14M8 1c3.5 3.5 3.5 10.5 0 14"/></svg></button>
+  <button class="ib" id="b-ledger" aria-label="Ledger: goals and how mining really works" data-n="0"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h5l1 1 1-1h5v12H9l-1 1-1-1H2zM8 3v11"/></svg></button>
+  <button class="ib" id="b-learn" aria-label="Foreman's notes"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 5V3h6v4L8 9v2M8 13v2"/></svg></button>
+  <button class="ib" id="b-donate" aria-label="Support the game" title="Support the game"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14L2 8V4l2-2h2l2 2 2-2h2l2 2v4z"/></svg></button>
+  <button class="ib" id="b-menu" aria-label="Menu"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/></svg></button>
+</div>
+
+<div id="dock" class="card" hidden>
+  <div id="tabs" role="tablist">
+    <button role="tab" data-tab="power" aria-selected="true">Power</button>
+    <button role="tab" data-tab="miners">Miners</button>
+    <button role="tab" data-tab="cooling">Cooling</button>
+    <button role="tab" data-tab="site">Site</button>
+    <span id="views" role="group" aria-label="Map views">
+      <button data-view="1" aria-pressed="false" title="Airflow: where fans blow and how hot each box is"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h9V3M1 9h12v2M1 13h6"/></svg>Airflow</button>
+      <button data-view="2" aria-pressed="false" title="Grid: which things share a power network"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M9 1L3 9h5l-1 6 6-8H8z"/></svg>Grid</button>
+      <button data-view="4" aria-pressed="false" title="Security: red is reachable by raiders"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h10v6l-5 6-5-6z"/></svg>Security</button>
+    </span>
+    <button id="b-ladder">Ladder</button>
+  </div>
+  <div id="items"></div>
+</div>
+
+<div id="placebar" class="card" hidden>
+  <span id="pb-text"></span>
+  <span id="pb-mode" class="seg mini" role="tablist" aria-label="Buy new or used" hidden></span>
+  <button class="btn" id="pb-rot" hidden>↻ Turn</button>
+  <button class="btn btn-p" id="pb-ok">Place</button>
+  <button class="btn" id="pb-cancel">Cancel</button>
+</div>
+
+<div id="inspector" class="card" hidden></div>
+<div id="status" hidden aria-live="polite"></div>
+<div id="hovertip" hidden></div>
+<button id="np" class="pill" hidden aria-label="Skip to the next song"><span class="lbl" style="color:var(--hash)">Foreman FM</span><span id="np-t"></span><span id="np-skip"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l6 5-6 5zM12 3v10"/></svg></span></button>
+<div id="toasts" aria-live="polite"></div>
+<div id="why" hidden></div>
+<div id="memo" class="memo" hidden></div>
+<div id="modal-wrap" hidden><div id="modal" class="card" role="dialog" aria-modal="true"></div></div>
+
+<div id="boot"><div class="px boot-title">POWER<br>GRID</div><div class="boot-bar"><i id="boot-bar"></i></div><div id="boot-msg">Loading the plant…</div></div>
+
+<script src="music.js?v=25"></script>
+<script src="history.js?v=25"></script>
+<script src="game.js?v=25"></script>
+<div id="finale" hidden></div>
+</body>
+</html>

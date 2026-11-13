@@ -1,0 +1,17 @@
+[package]
+name = "pg-sim"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Headless balance simulator: plays the real game core (../../src) with a greedy bot.
+# cargo run --release -- [runs] [diff] [live]
+
+[workspace]
+
+[[bin]]
+name = "pg-sim"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
