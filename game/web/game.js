@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-13.29';
+const BUILD = 'build 2026-11-13.30';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -2079,11 +2079,11 @@ async function fetchInvoice(sats, note) {
 }
 const fmtSats = (n) => n.toLocaleString('en-US') + ' sats';
 const satsUsd = (n) => { if (!market || !market.price) return ''; const usd = n / 1e8 * market.price; return ` · about ${usd < 0.995 ? Math.max(1, Math.round(usd * 100)) + '¢' : money(usd)}`; };
-function paidLightning(verified) {
+function paidLightning() {
   try { localStorage.setItem('pg-tipped', String(Date.now())); } catch (_) {}
   tipInv = null; try { localStorage.removeItem('pg-inv'); } catch (_) {}
   unlockGoal('lightning');
-  toast(verified ? 'Payment proven' : 'Thank you', verified ? 'The preimage matches the invoice: that\'s a Lightning receipt nobody can fake.' : 'Thanks for supporting the game.', 'var(--btc)', '', 'heart');
+  toast('Payment proven', 'The preimage matches the invoice: that\'s a Lightning receipt nobody can fake.', 'var(--btc)', '', 'heart');
 }
 function openDonate(back) {
   const inv = tipInv;
@@ -2104,7 +2104,7 @@ function openDonate(back) {
     ${inv && inv.hash ? `<div class="proof"><b>Paid? Prove it the Lightning way</b>
       <small>After paying, your wallet holds a <i>preimage</i>: the secret that unlocked this payment, usually under the payment details. Paste it and the game checks it against the invoice.</small>
       <div class="row"><input class="codein" data-k="pre" placeholder="Preimage (64 hex characters)" aria-label="Preimage" spellcheck="false" autocomplete="off"><button class="btn" data-a="check">Check</button></div>
-      <button class="linkbtn" data-a="honor">My wallet doesn't show it, I've paid</button></div>`
+      </div>`
     : ''}`, !back);
   const m = $('#modal');
   m.querySelector('[data-x]').onclick = back || closeModal;
@@ -2127,10 +2127,9 @@ function openDonate(back) {
     const v = m.querySelector('[data-k=pre]').value.trim().toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(v)) { toast('Not a preimage', 'A preimage is 64 characters of 0–9 and a–f.', 'var(--alarm)'); return; }
     let h = ''; try { h = await sha256hex(v); } catch (_) {}
-    if (h && h === inv.hash) { paidLightning(true); back ? back() : closeModal(); }
+    if (h && h === inv.hash) { paidLightning(); back ? back() : closeModal(); }
     else toast('That doesn\'t match', 'SHA-256 of that preimage isn\'t this invoice\'s payment hash. Check you copied the preimage, not the payment hash.', 'var(--alarm)');
   };
-  { const hb = m.querySelector('[data-a=honor]'); if (hb) hb.onclick = () => { paidLightning(false); back ? back() : closeModal(); }; }
 }
 // Natural high points get one gentle mention each per run, and never within two weeks of a tip.
 let nudged = {};
