@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-13.27';
+const BUILD = 'build 2026-11-13.28';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -790,10 +790,10 @@ function stepsHtml(u) {
 // Backers' milestones: the next target, what it pays and how close you are.
 function milestoneHtml() {
   if (!running || !E.milestone_next) return '';
-  const m = E.milestone_next(); if (m < 0) return '';
+  const m = E.milestone_next(); if (m < 0 || hushed['ms' + m]) return '';
   const what = E.milestone_info(m, 0), target = E.milestone_info(m, 1), pct = Math.floor(E.milestone_progress() * 100);
   const label = what ? `Survive the ${target > 1 ? 'second' : 'first'} halving` : `Switch on ${hash(target)}`;
-  return `<div class="steps ms"><div class="sh"><b>Next milestone</b><span class="dim">pays <b style="color:var(--cash)">${money(E.milestone_info(m, 2))}</b></span></div><div class="stp"><span>${label}</span>${what ? '' : bar(pct, 'var(--hash)') + `<span class="dim num">${pct}%</span>`}</div></div>`;
+  return `<div class="steps ms"><div class="sh"><b>Next milestone</b><span class="dim">pays <b style="color:var(--cash)">${money(E.milestone_info(m, 2))}</b></span><button class="ib mini" data-dx="ms${m}" aria-label="Hide this milestone">${ic('x')}</button></div><div class="stp"><span>${label}</span>${what ? '' : bar(pct, 'var(--hash)') + `<span class="dim num">${pct}%</span>`}</div></div>`;
 }
 
 // ------------------------------------------------------------------ Foreman tips (the learning curve)
@@ -1024,6 +1024,7 @@ const WHY = {
   market: ['Machine market', 'Mining machines are priced like the business they do. When hashprice is high, every box pays and buyers queue; when it falls, the oldest boxes stop paying and their owners sell. New machines follow hashprice at about three-quarters strength. Used ones follow their margin, so old ones swing hardest.', 'hashprice'],
   capitulation: ['Miner capitulation', 'When hashprice falls below what older machines cost to run, their owners switch them off and sell them. More used machines come up for sale, at lower prices. It\'s the best time to buy if your power is cheap.', 'market'],
   cash: ['Cash', 'Dollars in the bank. Power bills, repairs and new machines come out of it every block. Bitcoin only turns into cash when you sell it.'],
+  hashrate: ['Your hashrate', 'How many guesses your running boxes make every second. Your share of the network\'s total hashrate is your share of every block\'s reward, so this number against the network\'s is what you earn. It drops when boxes are off, unpowered, too hot, worn or missing parts.', 'hashprice'],
   net: ['Net per day', 'What your bitcoin earnings are worth per day at today\'s price, minus what your power costs per day. It moves with the price, the difficulty and your power mix.', 'hashprice'],
   price: ['Bitcoin price', 'In a live run this is today\'s real price from mempool.space, refreshed every few minutes. In a simulated run it wanders around a slowly rising trend, with crashes and pumps.'],
   power: ['Power used and capacity', 'Used is what your machines draw right now. Capacity is what your sources can supply. If a network asks for more than it gets, every box on it slows down.'],
@@ -1645,6 +1646,8 @@ function updateUI() {
   $('#h-btc .v').textContent = btcf(u[1]);
   const net = u[3]; const nv = $('#h-net .v');
   nv.textContent = (net < 0 ? '▼ ' : '▲ ') + money(net); nv.style.color = net < 0 ? 'var(--alarm)' : 'var(--ink)';
+  $('#h-hash .v').textContent = hash(u[11]);
+  { const sh = u[12] > 0 ? u[11] / u[12] * 100 : 0; const t = `Your hashrate: ${hash(u[11])}, ${sh >= 0.01 ? sh.toFixed(2) : sh.toPrecision(1)}% of the network's ${hash(u[12])}`; const c = $('#h-hash'); if (c.title !== t) c.title = t; }
   $('#h-pow .v').textContent = `${power(u[4])} / ${power(u[5])}`;
   { const l = u[346] === 1 ? `Power · $${Math.round(u[347]).toLocaleString('en-US')}` : 'Power'; const le = $('#h-pow .lbl'); if (le.textContent !== l) le.textContent = l; }
   $('#h-pow .v').style.color = u[245] > 0.5 ? 'var(--alarm)' : 'var(--volt)';
@@ -1704,6 +1707,7 @@ function renderHoverTip(u) {
   t.style.left = Math.min(innerWidth - t.offsetWidth - 8, mouseAt[0] + 16) + 'px';
   t.style.top = Math.max(8, mouseAt[1] - t.offsetHeight - 12) + 'px';
 }
+let hushed = {};
 function renderStatus(u) {
   const rows = [];
   if (u[245] > 0.5) rows.push(['alarm', `${ic('bolt')} Short <b>${power(u[245])}</b> · boxes on ${u[246] > 1 ? u[246] + ' networks' : 'that network'} slowed to ${Math.round(u[43] * 100)}%`, '<button class="btn mini" data-s="shed">Switch off worst</button><button class="btn btn-p mini" data-s="up">Upgrade power</button>', 'shortage']);
@@ -1725,9 +1729,14 @@ function renderStatus(u) {
   if (u[514] > 0) rows.push(['warn', `${ic('drop')} Dry season · the state halves miners' power until the rains`, '', 'dry']);
   if (u[512] === 5 && u[513] < 0.9) rows.push([u[513] < 0.6 ? 'warn' : '', `${ic('flame')} The well gives <b>${Math.round(u[513] * 100)}%</b> of what it did`, '', 'flare']);
   if (u[299] > 0) rows.push(['', `${ic('stack')} Fee spike ×${u[298].toFixed(1)} · blocks pay ${btcf(u[297] + u[23])}`, '<button class="btn mini" data-s="mempool">Mempool</button>', 'fees']);
-  const h = rows.map(([c, t, b, w]) => `<div class="st ${c}"><span>${t}</span>${w ? whyBtn(w) : ''}${b}</div>`).join('') + (stepsHtml(u) || milestoneHtml());
+  // an alert can be crossed off: it stays away until its cause clears, and comes back if the trouble returns
+  const live = new Set(rows.map((r) => r[3] || r[1]));
+  for (const k in hushed) if (!k.startsWith('ms') && !live.has(k)) delete hushed[k];
+  const xBtn = (k) => `<button class="ib mini" data-dx="${k.replace(/"/g, '&quot;')}" aria-label="Dismiss">${ic('x')}</button>`;
+  const h = rows.filter((r) => !hushed[r[3] || r[1]]).map(([c, t, b, w]) => `<div class="st ${c}"><span>${t}</span>${w ? whyBtn(w) : ''}${b}${xBtn(w || t)}</div>`).join('') + (stepsHtml(u) || milestoneHtml());
   if (h === statusHtml) return; statusHtml = h;
   const box = $('#status'); box.innerHTML = h; box.hidden = !h;
+  box.querySelectorAll('[data-dx]').forEach((b) => b.onclick = () => { hushed[b.dataset.dx] = 1; sfx('tap'); statusHtml = null; renderStatus(UI()); });
   box.querySelectorAll('[data-s]').forEach((b) => b.onclick = () => {
     const a = b.dataset.s;
     if (a === 'shed') E.shed();
@@ -1749,6 +1758,7 @@ setInterval(() => { dockDirty = true; }, 1500);
 $('#h-pow').onclick = () => { viewMask ^= 2; applyView(); };
 $('#h-cash').onclick = () => why('cash');
 $('#h-net').onclick = () => why('net');
+$('#h-hash').onclick = () => why('hashrate');
 $('#h-px').onclick = () => why('price');
 $('#pill').onclick = () => openNetwork('mempool');
 // ------------------------------------------------------------------ miner economics (what real miners look at)
@@ -2100,7 +2110,7 @@ function openDonate(back) {
       <small>After paying, your wallet holds a <i>preimage</i>: the secret that unlocked this payment, usually under the payment details. Paste it and the game checks it against the invoice.</small>
       <div class="row"><input class="codein" data-k="pre" placeholder="Preimage (64 hex characters)" aria-label="Preimage" spellcheck="false" autocomplete="off"><button class="btn" data-a="check">Check</button></div>
       <button class="linkbtn" data-a="honor">My wallet doesn't show it, I've paid</button></div>`
-    : `<button class="linkbtn" data-a="honor">${ledger.lightning ? 'I sent another tip' : 'I\'ve sent a tip'}</button>`}`, !back);
+    : ''}`, !back);
   const m = $('#modal');
   m.querySelector('[data-x]').onclick = back || closeModal;
   const make = async (sats) => {
@@ -2125,7 +2135,7 @@ function openDonate(back) {
     if (h && h === inv.hash) { paidLightning(true); back ? back() : closeModal(); }
     else toast('That doesn\'t match', 'SHA-256 of that preimage isn\'t this invoice\'s payment hash. Check you copied the preimage, not the payment hash.', 'var(--alarm)');
   };
-  m.querySelector('[data-a=honor]').onclick = () => { paidLightning(false); back ? back() : closeModal(); };
+  { const hb = m.querySelector('[data-a=honor]'); if (hb) hb.onclick = () => { paidLightning(false); back ? back() : closeModal(); }; }
 }
 // Natural high points get one gentle mention each per run, and never within two weeks of a tip.
 let nudged = {};
@@ -2332,7 +2342,7 @@ function askTutorial() {
 function afterStart() {
   try { seenTips = JSON.parse(localStorage.getItem('pg-tips') || '{}'); } catch (_) { seenTips = {}; }
   ['#hud', '#pill', '#speed', '#dock'].forEach((s) => $(s).hidden = false);
-  nudged = {}; applySkin();
+  nudged = {}; hushed = {}; applySkin();
   overShown = false; shownEvent = -1; fit(); setSpeed(1); viewMask = 0; viewAuto = 0; applyView(); renderDock(); running = true;
 }
 
