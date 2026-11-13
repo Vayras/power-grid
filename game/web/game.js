@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-13.28';
+const BUILD = 'build 2026-11-13.29';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -279,7 +279,6 @@ function openSettings() {
   openModal(`<div class="mh"><h2>Settings</h2><button class="ib" data-x aria-label="Close">${ic('x')}</button></div>
     <div class="set">
       <div class="setrow"><div><b>Tutorial</b><small>The foreman explains things as they come up, and the game waits while he talks.</small></div><button class="sw" role="switch" aria-checked="${settings.tutorial !== false}" data-k="tutorial" aria-label="Tutorial"></button></div>
-      ${ledger.lightning ? `<div class="setrow"><div><b>Gold containers</b><small>Your thank-you for a first Lightning payment. Looks only.</small></div><button class="sw" role="switch" aria-checked="${!!settings.gold}" data-k="gold" aria-label="Gold containers"></button></div>` : ''}
       <div class="setrow"><div><b>Foreman FM</b><small>Endless lo-fi made live in your browser. Every song is new.</small></div><button class="sw" role="switch" aria-checked="${settings.music}" data-k="music" aria-label="Music"></button></div>
       <div class="setrow"><div><b>Music volume</b></div><input type="range" min="0" max="1" step="0.05" value="${settings.vol}" data-k="vol" aria-label="Music volume"></div>
       <div class="setrow"><div><b>Now playing</b><small>${FM.title || '—'}</small></div><button class="btn" data-a="skip">Next song</button></div>
@@ -296,7 +295,6 @@ function openSettings() {
     if (k === 'music') { if (settings.music) startAudio(); else { FM.stop(); $('#np').hidden = true; } }
     if (k === 'voice' && !settings.voice) stopSpeaking();
     if (k === 'daynight') applyNight();
-    if (k === 'gold') applySkin();
     if (k === 'tutorial' && !settings.tutorial) { $('#memo').hidden = true; stopSpeaking(); }
   });
   m.querySelector('[data-k=vol]').oninput = (e) => { settings.vol = +e.target.value; FM.setVolume(settings.vol); saveSettings(); };
@@ -972,7 +970,7 @@ const GOALS = [
     game: 'Machine resale prices don\'t fall with the market in the game; in 2022 they fell more than 80%.' },
   { id: 'lightning', ch: 'Lightning', t: 'First Lightning payment', goal: 'Send a tip of any size from the tip jar.', flag: true,
     real: 'Lightning is a network of payment channels on top of bitcoin. To get paid, a wallet writes an invoice that carries the hash of a secret, the preimage. The payment hops across channels, and each hop can only claim its money by revealing that secret, so when the preimage comes back to the payer it is a receipt nobody could fake. Payments settle in seconds for a few sats in fees, which is why paying 21 sats makes sense at all. Underneath, every channel is an ordinary bitcoin transaction that miners confirm.',
-    game: 'The tip jar asks a real wallet for a real invoice, and the sats go to the developer. Paste the preimage your wallet shows and the game hashes it with SHA-256 and compares it with the invoice\'s payment hash, the same check Lightning nodes make. The card also unlocks gold containers, a skin with no effect on play.' },
+    game: 'The tip jar asks a real wallet for a real invoice, and the sats go to the developer. Paste the preimage your wallet shows and the game hashes it with SHA-256 and compares it with the invoice\'s payment hash, the same check Lightning nodes make.' },
   { id: 'h_halving', ch: 'History', t: 'The 2024 halving', goal: 'Finish the fourth halving replay.', flag: true,
     real: 'The subsidy halved, a fee frenzy paid one block more than any before it, and then hashprice fell to record lows. Every halving forces the same question: is this machine still worth the power it burns?',
     game: 'The halving lands on the real day and the fee spike is in the real data.' },
@@ -2042,7 +2040,7 @@ $('#b-sites').onclick = () => openSites();
 updateLedgerBadge();
 // ------------------------------------------------------------------ support the game: a Lightning tip jar
 // Value for value: the game is free, and paying is a lesson, not a gate. A first Lightning payment
-// unlocks a ledger card and gold containers. The game asks a real wallet for a real invoice, then checks
+// unlocks a ledger card. The game asks a real wallet for a real invoice, then checks
 // the preimage the player pastes back with SHA-256, the same proof every Lightning node relies on.
 const TIP_ADDR = 'inertmaid12@walletofsatoshi.com';
 const TIP_LNURL = 'https://walletofsatoshi.com/.well-known/lnurlp/inertmaid12';
@@ -2084,17 +2082,14 @@ const satsUsd = (n) => { if (!market || !market.price) return ''; const usd = n 
 function paidLightning(verified) {
   try { localStorage.setItem('pg-tipped', String(Date.now())); } catch (_) {}
   tipInv = null; try { localStorage.removeItem('pg-inv'); } catch (_) {}
-  const first = !ledger.lightning;
   unlockGoal('lightning');
-  if (first) { settings.gold = true; saveSettings(); applySkin(); }
-  toast(verified ? 'Payment proven' : 'Thank you', verified ? 'The preimage matches the invoice: that\'s a Lightning receipt nobody can fake. Gold containers are on (Settings).' : 'Thanks for supporting the game. Gold containers are on (Settings).', 'var(--btc)', '', 'heart');
+  toast(verified ? 'Payment proven' : 'Thank you', verified ? 'The preimage matches the invoice: that\'s a Lightning receipt nobody can fake.' : 'Thanks for supporting the game.', 'var(--btc)', '', 'heart');
 }
-function applySkin() { if (E.set_skin) E.set_skin(settings.gold && ledger.lightning ? 1 : 0); }
 function openDonate(back) {
   const inv = tipInv;
   const qr = inv ? PGQR.svg(inv.pr.toUpperCase(), 220) : `<img src="donate-qr.png" alt="Lightning QR code for ${TIP_ADDR}" width="220" height="220">`;
   openModal(`<div class="mh"><h2>Support Power Grid</h2><button class="ib" data-x aria-label="Close">${ic('x')}</button></div>
-    <p>Power Grid is free to play, with no ads and no tracking. If it taught you something about mining, pay what you want over Lightning.${ledger.lightning ? '' : ' Your first payment adds the Lightning card to your ledger and turns your containers gold.'}</p>
+    <p>Power Grid is free to play, with no ads and no tracking. If it taught you something about mining, pay what you want over Lightning.${ledger.lightning ? '' : ' Your first payment adds the Lightning card to your ledger.'}</p>
     <div class="amts" role="group" aria-label="Amount">${TIP_AMOUNTS.map((a) => `<button class="btn ${inv && inv.sats === a ? 'on' : ''}" data-sats="${a}">${a.toLocaleString('en-US')}</button>`).join('')}<input class="codein" type="number" min="1" inputmode="numeric" placeholder="Other" aria-label="Other amount in sats" data-k="custom"><span class="dim">sats</span></div>
     <input class="codein note" maxlength="140" placeholder="Note to the developer (optional)" aria-label="Note" data-k="note">
     <div class="donate">
@@ -2342,7 +2337,7 @@ function askTutorial() {
 function afterStart() {
   try { seenTips = JSON.parse(localStorage.getItem('pg-tips') || '{}'); } catch (_) { seenTips = {}; }
   ['#hud', '#pill', '#speed', '#dock'].forEach((s) => $(s).hidden = false);
-  nudged = {}; hushed = {}; applySkin();
+  nudged = {}; hushed = {};
   overShown = false; shownEvent = -1; fit(); setSpeed(1); viewMask = 0; viewAuto = 0; applyView(); renderDock(); running = true;
 }
 
