@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Rubik:wght@400;500;600;700&family=Courier+Prime:wght@400;700&display=swap">
-<link rel="stylesheet" href="style.css?v=26">
+<link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
 <canvas id="view" aria-label="The plant, seen from above" role="img"></canvas>
@@ -28,6 +28,7 @@
 
 <div id="speed" class="pill" hidden>
   <button class="ib" id="b-play" aria-label="Pause"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3v10M11 3v10"/></svg></button>
+  <button class="ib" id="b-skip" aria-pressed="false" aria-label="Skip ahead to the next thing that needs you" title="Skip ahead (F): top speed until an event, an alarm, a milestone or the cash for the next rung"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3l5 5-5 5zM8 3l5 5-5 5zM14 3v10"/></svg></button>
   <label class="spd" title="Game speed"><input type="range" id="spd" min="0" max="100" step="1" value="31" aria-label="Game speed" aria-describedby="spd-t"><span id="spd-t" class="num">36 s a day</span></label>
   <button class="ib" id="b-music" aria-label="Music and voice settings"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 12V3l8-2v9M3 12h3v3H3zM11 10h3v3h-3z"/></svg></button>
   <button class="ib" id="b-sites" aria-label="Your sites around the world" hidden><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a7 7 0 1 0 .01 0M1 8h14M8 1c-3.5 3.5-3.5 10.5 0 14M8 1c3.5 3.5 3.5 10.5 0 14"/></svg></button>
@@ -72,10 +73,10 @@
 
 <div id="boot"><div class="px boot-title">POWER<br>GRID</div><div class="boot-bar"><i id="boot-bar"></i></div><div id="boot-msg">Loading the plant…</div></div>
 
-<script src="music.js?v=26"></script>
-<script src="history.js?v=26"></script>
-<script src="qr.js?v=26"></script>
-<script src="game.js?v=26"></script>
+<script src="music.js?v=27"></script>
+<script src="history.js?v=27"></script>
+<script src="qr.js?v=27"></script>
+<script src="game.js?v=27"></script>
 <div id="finale" hidden></div>
 </body>
 </html>

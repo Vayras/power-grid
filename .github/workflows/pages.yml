@@ -35,6 +35,12 @@ jobs:
       - name: Balance smoke test (Normal must stay winnable)
         working-directory: game/tools/sim
         run: cargo run --release -q -- 20 0 sim | tee sim.txt
+      - name: Ladder rules (a map with no river can still climb past hydro)
+        working-directory: game/tools/sim
+        run: cargo run --release -q -- check
+      - name: Whole-ladder balance (most Normal runs must reach the core)
+        working-directory: game/tools/sim
+        run: cargo run --release -q -- 15 0 full
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

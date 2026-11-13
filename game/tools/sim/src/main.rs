@@ -6,6 +6,8 @@ extern crate alloc;
 #[path = "../../../src/rng.rs"] #[allow(dead_code)] mod rng;
 #[path = "../../../src/sprites.rs"] #[allow(dead_code)] mod sprites;
 
+mod full;
+
 use data::*;
 use game::*;
 
@@ -230,6 +232,18 @@ fn main() {
     let diff: u32 = a.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
     let live = a.get(3).map_or(false, |s| s == "live");
     let verbose = a.get(4).map_or(false, |s| s == "v");
+    // `check`: rules that must hold whatever the balance is
+    if a.get(1).map_or(false, |s| s == "check") { if !full::check_no_river() { eprintln!("LADDER CHECK FAILED"); std::process::exit(1); } return; }
+    // `full`: play the whole ladder and report the day each rung opened (PG_DAYS, default 4000; PG_SITE)
+    if a.get(3).map_or(false, |s| s == "full") {
+        let days = std::env::var("PG_DAYS").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(4000);
+        let site = std::env::var("PG_SITE").ok().and_then(|v| v.parse::<u8>().ok()).unwrap_or(0);
+        let res = full::report(runs, diff, site, days, verbose);
+        // CI guard: on Normal in Texas, most runs must finish the ladder and win
+        let won = res.iter().filter(|r| r.won.is_some()).count() as u32;
+        if diff == 0 && site == 0 && runs >= 10 && days >= 4000 && won * 2 < runs { eprintln!("BALANCE CHECK FAILED: only {won}/{runs} Normal runs reached the core"); std::process::exit(1); }
+        return;
+    }
     let mut gas = Vec::new(); let mut dsl = Vec::new(); let mut bk = 0; let mut never = 0; let mut bkd: Vec<f64> = Vec::new();
     for s in 0..runs {
         let seed = 0xC0FFEE ^ (s * 2654435761u32);

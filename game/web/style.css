@@ -388,7 +388,9 @@ details.xp p{font-size:13px;margin:2px 0 8px !important}
 .fwseg button small.neg{color:var(--alarm)}
 .fwseg button[aria-selected="true"] small{color:var(--ink)}
 .fwseg button[aria-selected="true"] small.neg{color:var(--alarm)}
-#inspector{max-height:calc(100vh - var(--dock-h,170px) - 40px);overflow-y:auto;overscroll-behavior:contain}
+#inspector{max-height:calc(100vh - var(--dock-h,170px) - 100px);overflow-y:auto;overscroll-behavior:contain}
+/* chrome is for tapping, not selecting: a shift-click on the map used to highlight every label */
+#hud,#pill,#speed,#dock,#placebar,#inspector,#status,#toasts,#np,#memo,#hovertip,canvas{-webkit-user-select:none;user-select:none}
 @media (max-width:719px){#inspector{max-height:calc(100vh - var(--dock-h,170px) - 150px)}}
 /* spot price by hour */
 .spotchart{display:flex;flex-direction:column;gap:4px}
@@ -433,3 +435,6 @@ details.xp p{font-size:13px;margin:2px 0 8px !important}
 #finale .fgo{position:relative;margin-top:28px;opacity:0;animation:fin .9s ease-out forwards}
 @keyframes fin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion: reduce){#finale .bloom,#finale .flines p,#finale .fgo{animation:none;opacity:1}}
+
+#b-skip[aria-pressed=true]{color:var(--volt);box-shadow:inset 0 0 0 2px var(--volt)}
+.steps.ms .stp{justify-content:space-between}.steps.ms .hbar{max-width:90px}

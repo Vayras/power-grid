@@ -49,9 +49,17 @@ PG_PARTS=crew cargo run --release -- 200 0 sim  # parts: none (ignore), fix (con
 PG_POOL=2 cargo run --release -- 60 0 sim       # 0 big FPPS, 1 budget overseas, 2 PPLNS
 PG_HEAT=1 cargo run --release -- 60 0 sim       # bot builds greenhouses next to its boxes
 PG_CONTRACT=1 cargo run --release -- 60 0 sim   # 0 fixed, 1 spot (PG_CAP=<$/MWh> for a flat limit), 2 demand response
+cargo run --release -- 15 0 full     # play the whole ladder: the day each rung opens (PG_DAYS=4000, PG_SITE; add v for a trace)
+cargo run --release -- check         # rules that must hold whatever the balance: a map with no river can still pass hydro
 ```
 
-CI runs it on every push and fails if fewer than half of Normal runs reach gas before the first halving.
+CI runs three checks on every push: at least half of Normal runs reach gas before the first halving (`sim`), the ladder
+rules hold (`check`), and at least half of 15 Normal runs climb the whole ladder and win (`full`).
+
+The `full` bot is a careful, unhurried player, not an expert: it grows while a box pays for itself, puts half its income
+aside for the next rung, trades old boxes in, keeps a guard and four signs but builds no walls. At build .27 it wins about
+24 of 30 Normal runs, the median around day 2,200 (the second halving, day ~1,975, is the earliest the core allows). It does
+not fence, so it does poorly on Hard and Brutal: those are not balanced against it yet.
 
 ## Save format
 
@@ -83,7 +91,13 @@ Upload `web/` to any static host. Make sure `.wasm` is served as `application/wa
   **free energy core**. Everything up to fission is real; the rungs after it are marked "game" in the UI, and the
   core's closing card explains why free energy wouldn't make mining free.
 - The core needs 2 halvings survived, fusion at level 3, ₿ 21 held, 2016 blocks with no power
-  shortage, $25M, and a d20 roll of 12 or more.
+  shortage, $5M, and a d20 roll of 12 or more.
+- **Grid limit:** a site gets four grid hookups (4.8 MW). Past that you make your own power, which is what the ladder is for.
+  Rung prices are set so a steady player has wind around the first halving and fusion before the second.
+- **Milestones:** your backers pay out as hashrate comes online (10 PH/s up to 2 EH/s) and when you survive each halving:
+  $1,500 up to $250,000. The next one shows under the alerts. Not in replays.
+- **Skip ahead (the double arrow, or F):** top speed until an event, an alarm, a milestone, a new rung, or enough cash for the next rung.
+- **Building:** the tool stays in hand until Esc or Done. With a mouse, drag a miner to lay a row.
 - Random events (heatwaves, gas spikes, brownouts, price swings, fires, inspectors, curtailment calls,
   fee spikes) hit most days on Hard. Unpaid bills for 3 days on Hard and the plant is repossessed.
 - Your grid contract is $35 / $45 / $55 per MWh on Normal / Hard / Brutal.

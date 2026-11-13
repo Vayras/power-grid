@@ -300,8 +300,25 @@ pub extern "C" fn paint_tile(i: i32, j: i32) -> i32 {
         if why == 0.0 { gg.place(K_WALL, i, j, 0); return 1; }
         if why == T_NO_CASH { gg.toast(T_NO_CASH, 0.0); return -1; }
     }
+    // a row of boxes: dragging with a miner in hand places one on every free tile it crosses
+    if rr.tool >= K_MINER1 as i32 && rr.tool <= K_MINER4 as i32 {
+        let k = rr.tool as u8;
+        let why = gg.can_place(k, i, j);
+        if why == 0.0 { gg.place(k, i, j, 0); return 1; }
+        if why == T_NO_CASH || why == T_NO_STOCK { gg.toast(why, k as f64); return -1; }
+    }
     0
 }
+/// Backers' milestones: the next one (-1 = none), how far along it is, and its table row (what: 0 kind, 1 target, 2 cash).
+#[no_mangle] pub extern "C" fn milestone_next() -> i32 { g().milestone_next() }
+#[no_mangle] pub extern "C" fn milestone_progress() -> f64 { g().milestone_progress() }
+#[no_mangle] pub extern "C" fn milestone_info(m: u32, what: u32) -> f64 {
+    match MILESTONES.get(m as usize) { Some(x) => match what { 0 => x.0 as f64, 1 => x.1, _ => x.2 }, None => 0.0 }
+}
+/// The next step up the ladder here: its cost (0 = nothing left), its kind, and whether it is an upgrade.
+#[no_mangle] pub extern "C" fn next_rung_cost() -> f64 { g().next_rung().map_or(0.0, |x| x.0) }
+#[no_mangle] pub extern "C" fn next_rung_kind() -> i32 { g().next_rung().map_or(-1, |x| x.1 as i32) }
+#[no_mangle] pub extern "C" fn next_rung_upgrade() -> i32 { g().next_rung().map_or(0, |x| x.2 as i32) }
 #[no_mangle] pub extern "C" fn hover(sx: i32, sy: i32) { let rr = r(); let t = rr.pick(sx, sy); rr.hover = t; }
 #[no_mangle] pub extern "C" fn hover_tile(i: i32, j: i32) { r().hover = (i, j); }
 

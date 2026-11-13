@@ -136,6 +136,8 @@ pub struct Game {
     pub follower: bool, pub day_off: u64,
     // unlock flags for the ladder rungs past index 9 (deep geothermal, orbital solar)
     pub unlocked_x: [bool; 2],
+    // backers' milestones already paid, one bit each (see MILESTONES)
+    pub milestones: u32,
 }
 
 impl Game {
@@ -172,7 +174,7 @@ impl Game {
             piped: Vec::new(), gh_kw: Vec::new(), heat_kw: 0.0, heat_earned: 0.0,
             pool: 0, pool_switches: 0, acc_th: 0.0, pplns_paid: 0.0, pplns_exp: 0.0, pool_blocks: 0,
             techs: 0, guards: 0, spares: [0; 3], spare_target: [0; 3], fails: [0; 3], swapped: [0; 3], wages_paid: 0.0, parts_lost_th: 0.0,
-            site, well_f: 1.0, tariffs: 0, follower: false, day_off: 0, unlocked_x: [false; 2],
+            site, well_f: 1.0, tariffs: 0, follower: false, day_off: 0, unlocked_x: [false; 2], milestones: 0,
         };
         g.grid_usd = SITES[site as usize].grid + 10.0 * (diff.min(2) as f64);
         g.hp_eq = g.hashprice();
@@ -386,6 +388,7 @@ impl Game {
             } }
             if !near_water { return T_NEEDS_WATER; }
         }
+        if kind == K_GRID && self.blds.iter().filter(|b| b.kind == K_GRID).count() >= GRID_MAX { return T_GRID_FULL; }
         if kind == K_CORE && (self.core_reqs().iter().any(|x| !*x) || self.block < self.core_cooldown) { return T_CORE_REQ; }
         if is_miner(kind) && self.buy_used && self.stock[(kind - K_MINER1) as usize] == 0 { return T_NO_STOCK; }
         if self.cash < self.place_cost(kind, i, j) { return T_NO_CASH; }
@@ -582,8 +585,25 @@ impl Game {
         let (kind, lvl) = (b.kind, b.level);
         { let k = KINDS[kind as usize]; let (bi, bj) = (b.i as i32, b.j as i32); self.fx.push((2, bi, bj, k.w, k.d)); }
         if kind == K_WALL { self.rebuild_security(); return; }
-        if lvl >= 3 { if let Some(nx) = next_tier(kind) { if !self.tier_unlocked(nx) { self.unlock_tier(nx); self.toast(T_UNLOCK, nx as f64); } } }
+        if lvl >= 3 { self.open_next(kind); }
         self.dispatch(false);
+    }
+
+    /// Maxing a rung opens the next one. A dam needs a river, so on a map without one the rung before
+    /// hydro opens the rung after it as well (hydro itself still unlocks, for your other sites).
+    fn open_next(&mut self, kind: u8) {
+        let mut k = kind;
+        while let Some(nx) = next_tier(k) {
+            let skip = nx == K_HYDRO && !self.t_river;
+            if !self.tier_unlocked(nx) { self.unlock_tier(nx); if !skip { self.toast(T_UNLOCK, nx as f64); } }
+            if !skip { break; }
+            k = nx;
+        }
+    }
+    /// Saves from before the no-river rule: a maxed rung always has its next rung open.
+    fn mend_ladder(&mut self) {
+        for x in 0..self.blds.len() { let b = self.blds[x]; if is_power(b.kind) && b.kind != K_CORE && b.level >= 3 { self.open_next(b.kind); } }
+        self.toasts.clear();
     }
 
     pub fn repair_cost(&self, idx: usize) -> f64 {
@@ -882,13 +902,14 @@ impl Game {
             let (bi, bj) = (self.blds[x].i as i32, self.blds[x].j as i32);
             let fans = fmin(self.cool[bj as usize * MAP + bi as usize] as f64, 30.0) + if self.piped[x] >= 0 { HEAT_COOL } else { 0.0 };
             let mut imm = 0; let mut packed = 0;
-            for y in 0..n {
-                if y == x { continue; }
+            // boxes and tanks are one tile each, so "touching" is the eight tiles around this one
+            for dj in -1..=1i32 { for di in -1..=1i32 {
+                if di == 0 && dj == 0 { continue; }
+                let y = match self.tile(bi + di, bj + dj) { Some(t) if t.occ >= 0 => t.occ as usize, _ => continue };
                 let o = &self.blds[y];
-                let d = imax(iabs(o.i as i32 - bi), iabs(o.j as i32 - bj));
-                if o.kind == K_IMMERSION && o.off == 0 && d <= 1 && imm < 2 && self.net_frac(o) > 0.5 { imm += 1; }
-                if is_miner(o.kind) && o.broken == 0 && o.off == 0 && d <= 1 && self.net_frac(o) > 0.0 { packed += 1; } // hot exhaust from neighbours
-            }
+                if o.kind == K_IMMERSION && o.off == 0 && imm < 2 && self.net_frac(o) > 0.5 { imm += 1; }
+                if is_miner(o.kind) && o.broken == 0 && o.off == 0 && self.net_frac(o) > 0.0 { packed += 1; } // hot exhaust from neighbours
+            } }
             let running = self.blds[x].broken == 0 && self.blds[x].off == 0 && self.net_frac(&self.blds[x]) > 0.0;
             let gen_heat = if running { 40.0 + (self.blds[x].kind - K_MINER1) as f64 * 3.0 + self.blds[x].tune_heat() + self.blds[x].dead[P_FAN] as f64 * FAN_HEAT } else { 0.0 };
             let soak = packed as f64 * 4.5 + if running { self.blds[x].dust as f64 * 0.15 } else { 0.0 };
@@ -1109,9 +1130,46 @@ impl Game {
                 if self.unpaid_days as i32 >= limit { self.over = 1; }
             }
         } else { self.unpaid_days = 0; }
+        self.milestones_day();
         let p = [0.22, 0.38, 0.45][self.diff as usize];
         if self.scen_id > 0 { self.scen_events(); }
         else if self.day > 3 && self.rng.f() < p { self.random_event(); }
+    }
+
+    // ------------------------------------------------------------ milestones and the next rung
+    fn milestone_at(&self, m: usize) -> f64 { if MILESTONES[m].0 == 0 { self.my_th } else { self.halvings as f64 } }
+    /// The first milestone not yet paid, or -1. Replays are scored runs and other sites share the lead's wallet: neither has any.
+    pub fn milestone_next(&self) -> i32 {
+        if self.scen_id > 0 || self.follower { return -1; }
+        (0..MILESTONES.len()).find(|m| self.milestones & (1 << m) == 0).map_or(-1, |m| m as i32)
+    }
+    /// How far along the next milestone is, 0..1.
+    pub fn milestone_progress(&self) -> f64 {
+        let m = self.milestone_next(); if m < 0 { return 1.0; }
+        clamp(self.milestone_at(m as usize) / MILESTONES[m as usize].1, 0.0, 1.0)
+    }
+    fn milestones_day(&mut self) {
+        if self.scen_id > 0 || self.follower { return; }
+        for m in 0..MILESTONES.len() {
+            if self.milestones & (1 << m) != 0 || self.milestone_at(m) < MILESTONES[m].1 { continue; }
+            self.milestones |= 1 << m; self.cash += MILESTONES[m].2; self.toast(T_MILESTONE, m as f64);
+        }
+    }
+    /// The next step up the ladder on this site: (cost, kind, true if it is an upgrade). None once fusion is maxed.
+    pub fn next_rung(&self) -> Option<(f64, u8, bool)> {
+        for w in 0..LADDER.len() - 1 {
+            let k = LADDER[w];
+            if !self.tier_unlocked(k) { return None; }
+            if k == K_HYDRO && !self.t_river { continue; }
+            let last = LADDER[w + 1] == K_CORE; // the core wants fusion at level 3, which is also what unlocks it
+            if self.tier_unlocked(LADDER[w + 1]) && !last { continue; }
+            let best = (0..self.blds.len()).filter(|&x| self.blds[x].kind == k).max_by_key(|&x| self.blds[x].level);
+            return match best {
+                None => Some((KINDS[k as usize].cost, k, false)),
+                Some(x) => { let c = self.upgrade_cost(x); if c > 0.0 { Some((c, k, true)) } else { None } }
+            };
+        }
+        None
     }
 
     fn has(&self, kind: u8) -> bool { self.blds.iter().any(|b| b.kind == kind) }
@@ -1496,7 +1554,9 @@ impl Game {
             self.wages_paid,
             // v100+: site
             self.site as f64, self.well_f, self.tariffs as f64, self.follower as u8 as f64, self.day_off as f64,
-            self.unlocked_x[0] as u8 as f64, self.unlocked_x[1] as u8 as f64];
+            self.unlocked_x[0] as u8 as f64, self.unlocked_x[1] as u8 as f64,
+            // build .27: backers' milestones
+            self.milestones as f64];
         // v9+: version, then how many scalars follow, so later builds can append fields without breaking old saves
         f(scal[0]); f((scal.len() - 1) as f64);
         for v in scal.iter().skip(1) { f(*v); }
@@ -1552,6 +1612,8 @@ impl Game {
         }
         if has(85) { g.heat_earned = fs[85]; }
         if has(112) { g.unlocked_x = [fs[111] != 0.0, fs[112] != 0.0]; }
+        // a save from before milestones: the ones it has already passed count as paid, so loading it isn't a windfall
+        g.milestones = if has(113) { fs[113] as u32 } else { u32::MAX };
         if has(110) { g.follower = fs[109] != 0.0; g.day_off = fs[110] as u64; }
         if has(108) { g.site = (fs[106] as usize).min(N_SITES - 1) as u8; g.well_f = clamp(fs[107], 0.25, 1.0); g.tariffs = fs[108] as u32; }
         if has(105) {
@@ -1578,6 +1640,7 @@ impl Game {
             for bb in 0..k.d as i32 { for a in 0..k.w as i32 { g.tile_mut(b.i as i32 + a, b.j as i32 + bb).occ = x as i16; } }
         }
         g.rebuild_nets(); g.sync_workers();
+        g.mend_ladder();
         g.dispatch(false); g.update_temps(); g.dispatch(false); // temperatures and heat links, not just the defaults
         Some(g)
     }

@@ -1,13 +1,13 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-13.26';
+const BUILD = 'build 2026-11-13.27';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
 
 // ------------------------------------------------------------------ data (mirrors src/data.rs)
 const KINDS = [
-  { name: 'Grid hookup', tab: 'power', spr: 'B_GRID', desc: 'Utility power on a fixed contract. Brownouts and curtailment calls happen.' },
+  { name: 'Grid hookup', tab: 'power', spr: 'B_GRID', desc: 'Utility power on a fixed contract. Up to 4 per site. Brownouts and curtailment calls happen.' },
   { name: 'Diesel genset', tab: 'power', spr: 'B_DIESEL', desc: '$240/MWh, fuel price swings' },
   { name: 'Gas peaker', tab: 'power', spr: 'B_GAS', desc: '$60/MWh × gas price' },
   { name: 'Coal station', tab: 'power', spr: 'B_COAL', desc: '$45/MWh, inspectors' },
@@ -34,8 +34,10 @@ KINDS[21] = { name: 'Deep geothermal', tab: 'power', spr: 'B_DEEPGEO', desc: 'Ga
 KINDS[22] = { name: 'Orbital solar', tab: 'power', spr: 'B_ORBITAL', desc: 'Game: sunlight beamed down from orbit, day and night. Free', game: true };
 // The ladder's order: maxing one unlocks the next (same as LADDER in data.rs).
 const LADDER = [0, 1, 2, 3, 4, 5, 6, 7, 21, 22, 8, 9];
-const prevTier = (k) => LADDER[LADDER.indexOf(k) - 1];
-const nextTier = (k) => LADDER[LADDER.indexOf(k) + 1];
+// A map with no river can't build a dam, so the ladder steps over hydro there (UI()[30] = this site has a river).
+const noRiver = () => !UI()[30];
+const prevTier = (k) => { const p = LADDER[LADDER.indexOf(k) - 1]; return p === 6 && noRiver() ? 5 : p; };
+const nextTier = (k) => { const n = LADDER[LADDER.indexOf(k) + 1]; return n === 6 && noRiver() ? 7 : n; };
 const isPow = (k) => k <= 9 || k === 21 || k === 22;
 const CLEAR_ITEM = { name: 'Clear land', tab: 'site', spr: 'TREE_0', desc: 'Drag to remove trees ($150) and rubble ($250)' };
 const kindOf = (k) => (k === CLEAR ? CLEAR_ITEM : KINDS[k]);
@@ -166,13 +168,13 @@ let drag = null, pinch0 = 0, tool = -1, paint = null;
 canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType });
-  if (pointers.size === 1 && PAINT(tool)) { const [x, y] = toFb(e); E.hover(x, y); const c = E.hover_packed(); paint = { i: Math.floor(c / 1000), j: c % 1000, n: 0 }; paintTile(paint.i, paint.j); drag = null; return; }
+  if (pointers.size === 1 && (PAINT(tool) || (isMiner(tool) && e.pointerType === 'mouse' && E.occ_at(...toFb(e)) < 0))) { const [x, y] = toFb(e); E.hover(x, y); const c = E.hover_packed(); paint = { i: Math.floor(c / 1000), j: c % 1000, n: 0 }; paintTile(paint.i, paint.j); drag = null; return; }
   if (pointers.size === 1) drag = { x: e.clientX, y: e.clientY, moved: 0 };
   if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); drag = null; paint = null; }
 });
 function paintTile(i, j) {
   const r = E.paint_tile(i, j);
-  if (r === 1) { paint && paint.n++; if (!paint || paint.n % 2 === 1) sfx(tool === CLEAR ? 'clear' : 'fence'); }
+  if (r === 1) { paint && paint.n++; if (!paint || paint.n % 2 === 1) sfx(tool === CLEAR ? 'clear' : isMiner(tool) ? 'build' : 'fence'); }
   if (r === -1) { sfx('bad'); paint = null; }
 }
 function paintTo(i1, j1) {
@@ -206,7 +208,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 const endPtr = (e) => {
   const p = pointers.get(e.pointerId); pointers.delete(e.pointerId);
-  if (paint || (PAINT(tool) && p)) { paint = null; if (!pointers.size) drag = null; return; }
+  if (paint || (PAINT(tool) && p)) { paint = null; if (!pointers.size) drag = null; if (isMiner(tool)) { E.sync_ui(); showPlacebar(); } return; }
   if (!p || !drag || drag.moved > 14 || pointers.size) { if (!pointers.size) drag = null; return; }
   drag = null;
   const [x, y] = toFb(e);
@@ -214,7 +216,7 @@ const endPtr = (e) => {
   const r = E.click(x, y);
   E.sync_ui();
   if (r === 1 && (tool === 14 || tool === 15)) unlockGoal('cooling');
-  if (r === 1) { sfx(tool === 14 ? 'whoosh' : 'build'); if (!e.shiftKey) setTool(-1); }
+  if (r === 1) { sfx(tool === 14 ? 'whoosh' : 'build'); if (tool === 9) setTool(-1); else showPlacebar(); } // the tool stays in hand until Esc, Done or a tap on a building
   if (r === -1) sfx('bad');
   if (r === 3) dropTool();
   if (r === 2 || r === 3) { sfx('tap'); openInspector(); } else if (r === 0) closeInspector();
@@ -229,7 +231,8 @@ addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'r' || e.key === 'R') { if (tool === 14) { E.rotate_tool(); E.sync_ui(); showPlacebar(); } else if (inspOpen && UI()[81] === 14) { E.rotate_sel(); E.sync_ui(); renderInspector(true); } }
   if (e.key === 'Escape') { setTool(-1); closeInspector(); if (!$('#modal-wrap').hidden && closableModal) closeModal(); }
-  if (e.key === ' ') { e.preventDefault(); setSpeed(speed === 0 ? 1 : 0); }
+  if (e.key === ' ') { e.preventDefault(); if (skipping) stopSkip(false); setSpeed(speed === 0 ? 1 : 0); }
+  if (e.key === 'f' || e.key === 'F') startSkip();
   if (['1', '2', '3'].includes(e.key)) setRate([RATE_DEF, 30, RATE_MAX][+e.key - 1]);
   const pan = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] }[e.key];
   if (pan) E.pan(...pan);
@@ -393,14 +396,37 @@ const perDay = (r) => { const s = 144 / r; return s >= 60 ? (s / 60).toFixed(1) 
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // Nights strobe when a day lasts a second, so they fade out as the speed goes up.
 function applyNight() { if (E.set_night) E.set_night(settings.daynight === false ? 0 : rate <= 8 ? 1 : calm ? 0 : Math.max(0, 1 - (rate - 8) / 40)); }
+// Skip ahead: top speed until something needs you (an event, an alarm, a milestone, a new rung, or the cash for the next one).
+let skipping = null;
+function startSkip() {
+  if (skipping) return stopSkip(false);
+  const c = E.next_rung_cost(), u = UI();
+  skipping = { prev: rate, afford: c > 0 && u[0] < c ? c : 0 };
+  rate = RATE_MAX; setSpeed(1);
+}
+function stopSkip(pause) {
+  if (!skipping) return;
+  rate = skipping.prev; skipping = null;
+  if (pause) setSpeed(0); else if (speed) setSpeed(1); else paintSpeed();
+}
+function checkSkip(u) {
+  if (!skipping) return;
+  if (skipping.afford && u[0] >= skipping.afford) {
+    const k = E.next_rung_kind(), up = E.next_rung_upgrade();
+    stopSkip(true);
+    if (k >= 0) toast('You can afford the next rung', `${up ? 'Upgrade your' : 'Build a'} ${KINDS[k].name.toLowerCase()}: ${money(E.next_rung_cost())}.`, 'var(--hash)', 'unlock', 'up');
+  }
+}
 function paintSpeed() {
   const b = $('#b-play'); b.innerHTML = ic(speed ? 'pause' : 'play'); b.setAttribute('aria-label', speed ? 'Pause' : 'Play');
-  $('#spd').value = rateToPos(rate); $('#spd-t').textContent = speed ? perDay(rate) : 'Paused';
+  $('#spd').value = rateToPos(rate); $('#spd-t').textContent = !speed ? 'Paused' : skipping ? 'Skipping ahead' : perDay(rate);
+  { const sk = $('#b-skip'); if (sk) sk.setAttribute('aria-pressed', !!skipping); }
   $('#spd').setAttribute('aria-valuetext', perDay(rate)); $('#speed').classList.toggle('paused', !speed);
 }
 function setSpeed(s) { speed = s ? 1 : 0; E.set_rate(speed ? rate : 0); applyNight(); paintSpeed(); }
-function setRate(r) { rate = Math.min(RATE_MAX, Math.max(RATE_MIN, r)); try { localStorage.setItem('pg-rate', rate); } catch (_) {} setSpeed(1); }
-$('#b-play').onclick = () => setSpeed(speed ? 0 : 1);
+function setRate(r) { skipping = null; rate = Math.min(RATE_MAX, Math.max(RATE_MIN, r)); try { localStorage.setItem('pg-rate', rate); } catch (_) {} setSpeed(1); }
+$('#b-play').onclick = () => { if (skipping) stopSkip(false); setSpeed(speed ? 0 : 1); };
+$('#b-skip').onclick = () => { sfx('tap'); startSkip(); };
 $('#spd').oninput = (e) => setRate(posToRate(+e.target.value));
 
 // ------------------------------------------------------------------ dock
@@ -489,6 +515,8 @@ function showPlacebar() {
   let t = `${kindOf(tool).name}`;
   if (PAINT(tool)) t += ` · <span class="dim">${tool === 18 ? 'drag to lay walls, $300 a tile' : 'drag over trees and rubble'}</span>`;
   else t += ` · <b>${money(u[38] || (isMiner(tool) ? u[(u[338] > 0 ? 326 : 322) + tool - 10] : u[400 + tool]))}</b>`;
+  if (isMiner(tool) && !touch) t += ` <span class="dim">· click, or drag out a row</span>`;
+  { const list = isMiner(tool) ? u[(u[338] > 0 ? 326 : 322) + tool - 10] : u[400 + tool]; if (!PAINT(tool) && u[38] > list + 1) t += ` <span class="dim">incl. ${money(u[38] - list)} to clear the land</span>`; }
   if (tool === 14) t += ` · blows ${DIRN[u[98]]}`;
   $('#pb-text').innerHTML = t;
   const pm = $('#pb-mode'); pm.hidden = !isMiner(tool);
@@ -500,10 +528,10 @@ function showPlacebar() {
   }
   $('#pb-rot').hidden = tool !== 14;
   $('#pb-ok').hidden = PAINT(tool) || !touch;
-  $('#pb-cancel').textContent = PAINT(tool) ? 'Done' : 'Cancel';
+  $('#pb-cancel').textContent = 'Done';
 }
 $('#pb-rot').onclick = () => { E.rotate_tool(); showPlacebar(); sfx('whoosh'); };
-$('#pb-ok').onclick = () => { if (E.place_hover() === 1) { if (tool === 14 || tool === 15) unlockGoal('cooling'); sfx('build'); setTool(-1); } else sfx('bad'); };
+$('#pb-ok').onclick = () => { if (E.place_hover() === 1) { if (tool === 14 || tool === 15) unlockGoal('cooling'); sfx('build'); if (tool === 9) setTool(-1); else showPlacebar(); } else sfx('bad'); };
 $('#pb-mode').hidden = true;
 $('#pb-cancel').onclick = () => setTool(-1);
 
@@ -615,12 +643,13 @@ function positionInspector() {
   if (innerWidth < 720) { box.style.left = '10px'; box.style.right = '10px'; box.style.width = 'auto'; box.style.top = 'auto'; box.style.bottom = 'calc(var(--dock-h,170px) + 64px + env(safe-area-inset-bottom,0px))'; return; }
   const x = u[91] * r.width / fbW, y = u[92] * r.height / fbH;
   box.style.left = Math.min(innerWidth - 272, Math.max(10, x + 30)) + 'px';
-  box.style.top = Math.max(10, Math.min(innerHeight - box.offsetHeight - 180, Math.max(80, y - 70))) + 'px';
+  box.style.top = Math.max(64, Math.min(innerHeight - box.offsetHeight - $('#dock').offsetHeight - 24, Math.max(80, y - 70))) + 'px';
 }
 
 // ------------------------------------------------------------------ toasts
 const TOAST_IC = { 'var(--alarm)': 'warn', 'var(--cash)': 'check', 'var(--btc)': 'cube', 'var(--hash)': 'bolt', 'var(--muted)': 'help', 'var(--volt)': 'bolt' };
 function toast(title, body, color = 'var(--volt)', whyKey = '', icon = '') {
+  if (skipping && (color === 'var(--alarm)' || title === 'New power source')) stopSkip(color === 'var(--alarm)');
   const t = el('div', { class: 'toast', style: `--tc:${color}` }, `<span class="ti">${ic(icon || TOAST_IC[color] || 'bolt')}</span><div><b>${title}</b><span>${body}</span></div>${whyKey ? whyBtn(whyKey) : ''}`);
   $('#toasts').prepend(t); while ($('#toasts').children.length > (innerWidth < 720 ? 2 : 3)) $('#toasts').lastChild.remove();
   setTimeout(() => t.remove(), 6500);
@@ -676,6 +705,8 @@ function drainToasts(u) {
       case 46: toast('Tariff hike', `${u[512] === 0 ? 'Your supplier' : 'The utility'} raised what miners pay: now $${arg}/MWh.`, 'var(--alarm)', 'tariff', 'bolt'); sfx('bad'); break;
       case 47: toast(arg ? 'Dry season' : 'The rains are back', arg ? 'Rivers are low, so the state halves the power it sells to miners until the rains come.' : 'Rivers are full again. Your whole allocation is back.', arg ? 'var(--btc)' : 'var(--hash)', 'dry', 'drop'); break;
       case 48: toast('No power market here', 'Spot and demand-response contracts need a real-time power market. Here you buy from one supplier at a fixed price.', 'var(--muted)', 'site'); sfx('bad'); break;
+      case 49: toast('No more grid here', 'The utility allots a site four connections. For more power, climb the ladder and make your own.', 'var(--muted)', 'unlock'); sfx('bad'); break;
+      case 50: { const what = E.milestone_info(arg, 0), target = E.milestone_info(arg, 1); toast('Milestone reached', `${what ? (target > 1 ? 'Second' : 'First') + ' halving survived' : hash(target) + ' switched on'}. Your backers release <b>${money(E.milestone_info(arg, 2))}</b>.`, 'var(--cash)', '', 'check'); sfx('coin'); stopSkip(false); break; }
       case 34: toast('Fees back to normal', 'The mempool cleared. Blocks pay the usual fees again.', 'var(--muted)'); break;
     }
   }
@@ -754,6 +785,15 @@ function stepsHtml(u) {
   if (done === STEPS.length) { if (!steps.cheered) { steps.cheered = 1; steps.off = 1; saveSteps(); setTimeout(() => toast('First steps done', 'That\'s the loop: mine, pay for power, grow, climb the ladder. The rest is up to you.', 'var(--cash)', '', 'check'), 50); } return ''; }
   return `<div class="steps"><div class="sh"><b>First steps</b><span class="dim">${done} of ${STEPS.length}</span><button class="ib mini" data-s="steps-x" aria-label="Hide first steps">${ic('x')}</button></div>` +
     STEPS.map(([id, t]) => `<div class="stp ${steps[id] ? 'done' : ''}">${ic(steps[id] ? 'check' : 'pause')}<span>${t}</span></div>`).join('') + '</div>';
+}
+
+// Backers' milestones: the next target, what it pays and how close you are.
+function milestoneHtml() {
+  if (!running || !E.milestone_next) return '';
+  const m = E.milestone_next(); if (m < 0) return '';
+  const what = E.milestone_info(m, 0), target = E.milestone_info(m, 1), pct = Math.floor(E.milestone_progress() * 100);
+  const label = what ? `Survive the ${target > 1 ? 'second' : 'first'} halving` : `Switch on ${hash(target)}`;
+  return `<div class="steps ms"><div class="sh"><b>Next milestone</b><span class="dim">pays <b style="color:var(--cash)">${money(E.milestone_info(m, 2))}</b></span></div><div class="stp"><span>${label}</span>${what ? '' : bar(pct, 'var(--hash)') + `<span class="dim num">${pct}%</span>`}</div></div>`;
 }
 
 // ------------------------------------------------------------------ Foreman tips (the learning curve)
@@ -1621,6 +1661,7 @@ function updateUI() {
   if (sp) { $('#p-text').innerHTML = `${WX} · ${sp.text}${toHalv < 2016 ? ` · halving in <b class="num">${toHalv}</b>` : ''}`; $('#p-bar').style.width = sp.pct + '%'; $('#p-bar').style.background = 'var(--hash)'; }
   else { $('#p-text').innerHTML = `${WX} · Block ${u[6].toLocaleString()} · retarget in <b class="num">${toRet}</b>${u[241] && u[243] && !u[292] ? ` <span class="dim">(est ${u[243] > 0 ? '+' : ''}${(u[243] * 100).toFixed(1)}%)</span>` : ''}`; $('#p-bar').style.width = (100 - toRet / 20.16) + '%'; $('#p-bar').style.background = 'var(--volt)'; }
   drainToasts(u);
+  checkSkip(u);
   if (pendingLab && $('#modal-wrap').hidden) { pendingLab = 0; const was = speed; setSpeed(0); openNetwork('blocks'); const w = setInterval(() => { if ($('#modal-wrap').hidden) { clearInterval(w); setSpeed(was || 1); } }, 300); }
   renderStatus(u);
   if (u[15] >= 365 && !overShown) yearCheck(u);
@@ -1684,7 +1725,7 @@ function renderStatus(u) {
   if (u[514] > 0) rows.push(['warn', `${ic('drop')} Dry season · the state halves miners' power until the rains`, '', 'dry']);
   if (u[512] === 5 && u[513] < 0.9) rows.push([u[513] < 0.6 ? 'warn' : '', `${ic('flame')} The well gives <b>${Math.round(u[513] * 100)}%</b> of what it did`, '', 'flare']);
   if (u[299] > 0) rows.push(['', `${ic('stack')} Fee spike ×${u[298].toFixed(1)} · blocks pay ${btcf(u[297] + u[23])}`, '<button class="btn mini" data-s="mempool">Mempool</button>', 'fees']);
-  const h = rows.map(([c, t, b, w]) => `<div class="st ${c}"><span>${t}</span>${w ? whyBtn(w) : ''}${b}</div>`).join('') + stepsHtml(u);
+  const h = rows.map(([c, t, b, w]) => `<div class="st ${c}"><span>${t}</span>${w ? whyBtn(w) : ''}${b}</div>`).join('') + (stepsHtml(u) || milestoneHtml());
   if (h === statusHtml) return; statusHtml = h;
   const box = $('#status'); box.innerHTML = h; box.hidden = !h;
   box.querySelectorAll('[data-s]').forEach((b) => b.onclick = () => {
@@ -1875,6 +1916,7 @@ function openLab(opts = {}) {
 // ------------------------------------------------------------------ modals
 let closableModal = false, prevSpeed = 1;
 function openModal(html, closable = false) {
+  stopSkip(false);
   closableModal = closable; $('#modal').className = 'card'; $('#modal').innerHTML = html; $('#modal-wrap').hidden = false; $('#why').hidden = true;
   const f = $('#modal').querySelector('button'); if (f) f.focus();
 }
@@ -1966,9 +2008,9 @@ function openLadder() {
   const rungs = LADDER.slice(0, 11); let curTier = 0; rungs.forEach((k, n) => { if (u[430 + k] > 0) curTier = n; });
   const tiers = rungs.map((t, n) => { const k = KINDS[t];
     const unlocked = u[430 + t] > 0, lvl = t === 21 ? u[567] : t === 22 ? u[569] : u[60 + t], cnt = t === 21 ? u[566] : t === 22 ? u[568] : u[70 + t];
-    const state = !unlocked ? 'locked' : lvl >= 3 ? 'maxed' : cnt ? 'built' : 'open';
-    return `<div class="tier ${state === 'locked' ? 'locked' : ''} ${n === curTier ? 'cur' : ''}"><span class="thumb">${thumb(k.spr, 64)}</span>
-      <span class="lbl" style="color:${state === 'maxed' ? 'var(--hash)' : state === 'locked' ? 'var(--muted)' : 'var(--volt)'}">${String(n + 1).padStart(2, '0')}${k.game ? ' · game' : ''} · ${{ locked: 'Locked', maxed: 'Maxed', built: 'Built', open: 'Can build' }[state]}</span>
+    const state = t === 6 && !u[30] && !cnt ? 'skipped' : !unlocked ? 'locked' : lvl >= 3 ? 'maxed' : cnt ? 'built' : 'open';
+    return `<div class="tier ${state === 'locked' || state === 'skipped' ? 'locked' : ''} ${n === curTier ? 'cur' : ''}"><span class="thumb">${thumb(k.spr, 64)}</span>
+      <span class="lbl" style="color:${state === 'maxed' ? 'var(--hash)' : state === 'locked' || state === 'skipped' ? 'var(--muted)' : 'var(--volt)'}">${String(n + 1).padStart(2, '0')}${k.game ? ' · game' : ''} · ${{ locked: 'Locked', maxed: 'Maxed', built: 'Built', open: 'Can build', skipped: 'No river here: skipped' }[state]}</span>
       <b style="font-size:13px">${k.name}</b><span class="num" style="color:var(--volt)">${power(CAP[t][2])} max</span><span style="color:var(--muted)">${k.desc}</span>
       <span class="dots">${[1, 2, 3].map((q) => `<span class="${lvl >= q ? 'on' : ''}"></span>`).join('')}</span></div>`;
   }).join('');
@@ -2236,7 +2278,7 @@ function newRunScreen() {
   running = running && false; ['#hud', '#pill', '#speed', '#dock', '#np', '#status'].forEach((s) => $(s).hidden = true); statusHtml = ''; $('#memo').hidden = true; memoResume = false; stopSpeaking(); closeInspector(); setTool(-1);
   const has = !!localStorage.getItem('pg-save');
   E.set_site(pickSite); E.preview_seed(pickSeed); redraw = true; const u = UI();
-  const tr = [['River', u[30] ? 'Yes: a dam is possible' : 'None: no hydro this run', u[30] ? 'var(--hash)' : 'var(--alarm)'],
+  const tr = [['River', u[30] ? 'Yes: a dam is possible' : 'None: the ladder skips hydro', u[30] ? 'var(--hash)' : 'var(--alarm)'],
     ['Sunshine', u[31] > 0.95 ? 'Strong' : u[31] > 0.7 ? 'Average' : 'Weak: solar struggles', u[31] > 0.7 ? 'var(--hash)' : 'var(--alarm)'],
     ['Wind', u[32] > 1.0 ? 'Strong' : u[32] > 0.7 ? 'Average' : 'Weak', u[32] > 0.7 ? 'var(--hash)' : 'var(--alarm)'],
     ['Coal seam', u[33] ? 'Yes: cheap coal' : 'None: coal shipped in (+$15/MWh)', u[33] ? 'var(--hash)' : 'var(--alarm)']];

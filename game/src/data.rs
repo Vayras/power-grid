@@ -58,15 +58,15 @@ const fn aux(sprite: usize, cost: f64, kw: f64) -> Kind {
 
 pub static KINDS: [Kind; N_KINDS] = [
     pw(1, 1, S::B_GRID, 12_000.0, 8_000.0, 18_000.0, [250.0, 600.0, 1_200.0], 45.0, false),
-    pw(1, 1, S::B_DIESEL, 15_000.0, 15_000.0, 20_000.0, [500.0, 1_000.0, 2_000.0], 240.0, false),
-    pw(2, 2, S::B_GAS, 400_000.0, 300_000.0, 600_000.0, [2_000.0, 5_000.0, 10_000.0], 60.0, false),
-    pw(3, 2, S::B_COAL, 2_000_000.0, 1_500_000.0, 3_000_000.0, [10_000.0, 20_000.0, 40_000.0], 45.0, true),
-    pw(2, 2, S::B_SOLAR, 3_000_000.0, 2_500_000.0, 5_000_000.0, [5_000.0, 12_000.0, 25_000.0], 0.0, false),
-    pw(1, 1, S::B_WIND0, 5_000_000.0, 4_000_000.0, 8_000_000.0, [6_000.0, 12_000.0, 20_000.0], 0.0, false),
-    pw(2, 2, S::B_HYDRO, 12_000_000.0, 10_000_000.0, 20_000_000.0, [20_000.0, 40_000.0, 80_000.0], 10.0, false),
-    pw(2, 2, S::B_FISSION, 40_000_000.0, 30_000_000.0, 60_000_000.0, [50_000.0, 100_000.0, 150_000.0], 28.0, false),
-    pw(2, 2, S::B_FUSION, 80_000_000.0, 60_000_000.0, 120_000_000.0, [200_000.0, 350_000.0, 500_000.0], 8.0, false),
-    pw(2, 2, S::B_CORE, 150_000_000.0, 0.0, 0.0, [1.0e12, 1.0e12, 1.0e12], 0.0, false),
+    pw(1, 1, S::B_DIESEL, 6_000.0, 6_000.0, 8_000.0, [500.0, 1_000.0, 2_000.0], 240.0, false),
+    pw(2, 2, S::B_GAS, 8_000.0, 8_000.0, 12_000.0, [2_000.0, 5_000.0, 10_000.0], 60.0, false),
+    pw(3, 2, S::B_COAL, 8_000.0, 8_000.0, 10_000.0, [10_000.0, 20_000.0, 40_000.0], 45.0, true),
+    pw(2, 2, S::B_SOLAR, 12_000.0, 12_000.0, 16_000.0, [5_000.0, 12_000.0, 25_000.0], 0.0, false),
+    pw(1, 1, S::B_WIND0, 14_000.0, 16_000.0, 20_000.0, [6_000.0, 12_000.0, 20_000.0], 0.0, false),
+    pw(2, 2, S::B_HYDRO, 150_000.0, 200_000.0, 250_000.0, [20_000.0, 40_000.0, 80_000.0], 10.0, false),
+    pw(2, 2, S::B_FISSION, 400_000.0, 500_000.0, 700_000.0, [50_000.0, 100_000.0, 150_000.0], 28.0, false),
+    pw(2, 2, S::B_FUSION, 3_000_000.0, 3_600_000.0, 4_500_000.0, [200_000.0, 350_000.0, 500_000.0], 8.0, false),
+    pw(2, 2, S::B_CORE, 5_000_000.0, 0.0, 0.0, [1.0e12, 1.0e12, 1.0e12], 0.0, false),
     // Game prices are about 1/6 of real (REAL_PRICE below) so a run fits in an evening.
     // Hashrate, power draw and everything Bitcoin pays are real.
     mn(S::B_MINER1, 600.0, 1_040.0, 30.7),        // 10x Antminer S19j Pro  (104 TH, 29.5 J/TH)
@@ -84,11 +84,14 @@ pub static KINDS: [Kind; N_KINDS] = [
     // greenhouse next door: buys the waste heat of miners within HEAT_REACH tiles
     Kind { w: 2, d: 2, sprite: S::B_GREENHOUSE, cost: 6_000.0, up2: 0.0, up3: 0.0, cap_kw: [0.0; 3], usd_mwh: 0.0, th: 0.0, kw: 0.0, coal_pad: false, pad: false, reach: 0, electric: false },
     // deep geothermal: wells 15 km down to superhot rock (game)
-    pw(2, 2, S::B_DEEPGEO, 50_000_000.0, 40_000_000.0, 60_000_000.0, [80_000.0, 120_000.0, 160_000.0], 6.0, false),
+    pw(2, 2, S::B_DEEPGEO, 900_000.0, 1_200_000.0, 1_600_000.0, [80_000.0, 120_000.0, 160_000.0], 6.0, false),
     // orbital solar: sunlight collected in orbit and beamed to a ground station, day and night (game)
-    pw(2, 2, S::B_ORBITAL, 65_000_000.0, 50_000_000.0, 80_000_000.0, [120_000.0, 200_000.0, 300_000.0], 0.0, false),
+    pw(2, 2, S::B_ORBITAL, 1_500_000.0, 1_800_000.0, 2_400_000.0, [120_000.0, 200_000.0, 300_000.0], 0.0, false),
 ];
 
+/// A utility only allots a site so much: this many grid hookups, and after that you make your own power.
+/// It is what makes the ladder worth climbing before the halvings do.
+pub const GRID_MAX: usize = 4;
 /// The order of the power ladder: maxing one unlocks the next.
 pub const LADDER: [u8; 12] = [K_GRID, K_DIESEL, K_GAS, K_COAL, K_SOLAR, K_WIND, K_HYDRO, K_FISSION, K_DEEPGEO, K_ORBITAL, K_FUSION, K_CORE];
 pub fn next_tier(k: u8) -> Option<u8> { let p = LADDER.iter().position(|x| *x == k)?; LADDER.get(p + 1).copied() }
@@ -202,7 +205,18 @@ pub const T_PARTS_FAILED: f64 = 44.0;  // arg = parts that failed today with nob
 pub const T_PARTS_FIXED: f64 = 45.0;   // arg = what the contractor charged
 pub const T_TARIFF: f64 = 46.0;        // arg = new contract price $/MWh
 pub const T_DRY_SEASON: f64 = 47.0;    // arg = 1 started, 0 ended
-pub const T_NO_MARKET: f64 = 48.0;     // this site has no power market to buy spot or demand response from
+pub const T_NO_MARKET: f64 = 48.0;
+pub const T_GRID_FULL: f64 = 49.0;     // the utility won't give this site another connection     // this site has no power market to buy spot or demand response from
+
+pub const T_MILESTONE: f64 = 50.0;     // arg = index into MILESTONES
+
+/// Backers' milestones. Miners raise money against hashrate they have actually switched on, so each target
+/// reached releases a tranche of cash: something to aim for between rungs, and a cushion after a halving.
+/// (what, target, cash): what 0 = hashrate in TH/s, 1 = halvings survived.
+pub const MILESTONES: [(u8, f64, f64); 9] = [
+    (0, 10_000.0, 1_500.0), (0, 50_000.0, 5_000.0), (0, 100_000.0, 10_000.0), (0, 250_000.0, 25_000.0), (1, 1.0, 25_000.0),
+    (0, 500_000.0, 50_000.0), (0, 1_000_000.0, 100_000.0), (0, 2_000_000.0, 200_000.0), (1, 2.0, 250_000.0),
+];
 
 pub const W_CLEAR: u8 = 0;
 pub const W_RAIN: u8 = 1;
