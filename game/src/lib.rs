@@ -236,6 +236,8 @@ pub extern "C" fn switch_site(k: u32) {
 /// The core held: keep mining with free power (every site).
 #[no_mangle] pub extern "C" fn keep_mining() { unsafe { for gm in WORLD.iter_mut() { gm.keep_mining(); } } }
 /// Day and night strength, 0..1 (JS lowers it at high speeds so nights don't strobe).
+/// Gold miner containers on or off (cosmetic).
+#[no_mangle] pub extern "C" fn set_skin(gold: u32) { r().gold = gold != 0; }
 #[no_mangle] pub extern "C" fn set_night(s: f64) { r().night = if s.is_nan() { 0.0 } else { math::clamp(s, 0.0, 1.0) as f32 }; }
 /// Where the next new_game happens (SITES index).
 #[no_mangle] pub extern "C" fn set_site(s: u32) { unsafe { SITE = (s as usize).min(N_SITES - 1) as u8; } }

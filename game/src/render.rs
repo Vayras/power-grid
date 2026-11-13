@@ -27,6 +27,7 @@ pub struct Renderer {
     puffs: Vec<(u8, i32, i32, u8, u8, u32)>, // kind, i, j, w, d, start frame
     trucks: Vec<(i32, i32, u32)>,            // delivery to tile (i, j), start frame
     raiders: Vec<(f32, f32, f32, f32, u32)>, // running from (i, j) towards (i, j), start frame
+    pub gold: bool,                          // gold miner containers (a cosmetic)
     pub night: f32,                          // 0 = no day/night, 1 = full strength (JS lowers it at high speed)
 }
 
@@ -47,7 +48,7 @@ fn blend(dst: u32, src: u32, a: u32) -> u32 {
 
 impl Renderer {
     pub fn new() -> Renderer {
-        Renderer { trucks: Vec::new(), raiders: Vec::new(), night: 1.0, fb: Vec::new(), w: 0, h: 0, cam_x: 0, cam_y: 0, frame: 0, tool: -1, tool_dir: 0, hover: (-1, -1), sel: -1, view: 0,
+        Renderer { trucks: Vec::new(), raiders: Vec::new(), gold: false, night: 1.0, fb: Vec::new(), w: 0, h: 0, cam_x: 0, cam_y: 0, frame: 0, tool: -1, tool_dir: 0, hover: (-1, -1), sel: -1, view: 0,
                    atlas: Vec::new(), list: Vec::with_capacity(4096), puffs: Vec::with_capacity(64) }
     }
 
@@ -771,6 +772,7 @@ impl Renderer {
         let k = KINDS[b.kind as usize];
         if b.kind == K_WALL { self.wall(g, &b); return; }
         let mut spr = self.sprite_for(b.kind, b.dir);
+        if self.gold && is_miner(b.kind) { spr = spr - S::B_MINER1 + S::B_MINERG1; }
         if b.kind == K_WIND { spr = S::B_WIND0 + ((self.frame / 6 + idx as u32) % 3) as usize; }
         let s = S::SPRITES[spr];
         let (ax, mut ay) = self.to_screen(b.i as f32, b.j as f32);

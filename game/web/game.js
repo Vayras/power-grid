@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-13.25';
+const BUILD = 'build 2026-11-13.26';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -276,6 +276,7 @@ function openSettings() {
   openModal(`<div class="mh"><h2>Settings</h2><button class="ib" data-x aria-label="Close">${ic('x')}</button></div>
     <div class="set">
       <div class="setrow"><div><b>Tutorial</b><small>The foreman explains things as they come up, and the game waits while he talks.</small></div><button class="sw" role="switch" aria-checked="${settings.tutorial !== false}" data-k="tutorial" aria-label="Tutorial"></button></div>
+      ${ledger.lightning ? `<div class="setrow"><div><b>Gold containers</b><small>Your thank-you for a first Lightning payment. Looks only.</small></div><button class="sw" role="switch" aria-checked="${!!settings.gold}" data-k="gold" aria-label="Gold containers"></button></div>` : ''}
       <div class="setrow"><div><b>Foreman FM</b><small>Endless lo-fi made live in your browser. Every song is new.</small></div><button class="sw" role="switch" aria-checked="${settings.music}" data-k="music" aria-label="Music"></button></div>
       <div class="setrow"><div><b>Music volume</b></div><input type="range" min="0" max="1" step="0.05" value="${settings.vol}" data-k="vol" aria-label="Music volume"></div>
       <div class="setrow"><div><b>Now playing</b><small>${FM.title || '—'}</small></div><button class="btn" data-a="skip">Next song</button></div>
@@ -292,6 +293,7 @@ function openSettings() {
     if (k === 'music') { if (settings.music) startAudio(); else { FM.stop(); $('#np').hidden = true; } }
     if (k === 'voice' && !settings.voice) stopSpeaking();
     if (k === 'daynight') applyNight();
+    if (k === 'gold') applySkin();
     if (k === 'tutorial' && !settings.tutorial) { $('#memo').hidden = true; stopSpeaking(); }
   });
   m.querySelector('[data-k=vol]').oninput = (e) => { settings.vol = +e.target.value; FM.setVolume(settings.vol); saveSettings(); };
@@ -654,7 +656,7 @@ function drainToasts(u) {
       case 26: toast('Lightning strike', arg ? 'A bolt hit a miner box and set it on fire.' : 'A bolt hit a miner box. Its health took a beating.', 'var(--alarm)', 'lightning', 'storm'); break;
       case 27: { const W = [['Skies cleared', 'Back to normal.', 'var(--cash)'], ['Rain', 'Cooler air (−4 °C), weak solar. Rain rinses some dust off.', 'var(--hash)'], ['Thunderstorm', 'Turbines lock, solar is near zero, and lightning can hit your boxes.', 'var(--alarm)'], ['Dust storm', 'Grit clogs filters fast. Dusty boxes run hot. Clean them after.', 'var(--btc)']][arg]; toast(W[0], W[1], W[2]); if (arg === 3) tip('dust'); if (arg === 2) tip('storm'); break; }
       case 28: toast('Cleaned', `${arg} ${arg === 1 ? 'box' : 'boxes'} blown out with compressed air.`, 'var(--cash)'); break;
-      case 29: toast('You found a block, solo', `A whole block: ${btcf(arg)}. No pool, no fee.`, 'var(--btc)', 'block', 'cube'); sfx('block'); rememberBlock(u, arg); pendingLab = arg; break;
+      case 29: toast('You found a block, solo', `A whole block: ${btcf(arg)}. No pool, no fee.`, 'var(--btc)', 'block', 'cube'); sfx('block'); rememberBlock(u, arg); pendingLab = arg; setTimeout(() => tipNudge('solo', 'A solo block', 'Real solo miners wait years for one. If you enjoyed finding it, the tip jar is open.'), 4000); break;
       case 30: toast(arg ? 'Mining solo' : 'Back in the pool', arg ? 'No more steady payouts. You get paid only when you find a block yourself.' : 'Steady payouts every block for your share, minus 2%.', 'var(--btc)'); if (arg) tip('solo'); break;
       case 23: toast('Nothing to clear', 'Only trees and rubble can be cleared.', 'var(--muted)'); break;
       case 31: toast('Fee spike', `The mempool is jammed: fees ×${arg.toFixed(arg < 10 ? 1 : 0)}. Every block now pays ${btcf(u[297] + u[23])}. Fees are paid on top of the block reward.`, 'var(--btc)', 'fees', 'stack'); sfx('coin'); tip('fees'); break;
@@ -928,11 +930,14 @@ const GOALS = [
   { id: 'h_bear', ch: 'History', t: 'Crypto winter, 2022', goal: 'Finish the crypto winter replay.', flag: true,
     real: 'Price fell by two thirds while difficulty kept rising and power got dearer. Leverage turned a bad year into bankruptcies. The survivors had cheap power, efficient machines and little debt.',
     game: 'Machine resale prices don\'t fall with the market in the game; in 2022 they fell more than 80%.' },
+  { id: 'lightning', ch: 'Lightning', t: 'First Lightning payment', goal: 'Send a tip of any size from the tip jar.', flag: true,
+    real: 'Lightning is a network of payment channels on top of bitcoin. To get paid, a wallet writes an invoice that carries the hash of a secret, the preimage. The payment hops across channels, and each hop can only claim its money by revealing that secret, so when the preimage comes back to the payer it is a receipt nobody could fake. Payments settle in seconds for a few sats in fees, which is why paying 21 sats makes sense at all. Underneath, every channel is an ordinary bitcoin transaction that miners confirm.',
+    game: 'The tip jar asks a real wallet for a real invoice, and the sats go to the developer. Paste the preimage your wallet shows and the game hashes it with SHA-256 and compares it with the invoice\'s payment hash, the same check Lightning nodes make. The card also unlocks gold containers, a skin with no effect on play.' },
   { id: 'h_halving', ch: 'History', t: 'The 2024 halving', goal: 'Finish the fourth halving replay.', flag: true,
     real: 'The subsidy halved, a fee frenzy paid one block more than any before it, and then hashprice fell to record lows. Every halving forces the same question: is this machine still worth the power it burns?',
     game: 'The halving lands on the real day and the fee spike is in the real data.' },
 ];
-const CHAPTERS = ['Basics', 'Network', 'Economics', 'Operations', 'World', 'Endgame', 'History'];
+const CHAPTERS = ['Basics', 'Network', 'Economics', 'Operations', 'World', 'Endgame', 'Lightning', 'History'];
 GOALS.sort((a, b) => CHAPTERS.indexOf(a.ch) - CHAPTERS.indexOf(b.ch));
 let ledger = {};
 try { ledger = JSON.parse(localStorage.getItem('pg-ledger') || '{}') || {}; } catch (_) { ledger = {}; }
@@ -1895,7 +1900,7 @@ function showEvent(id, u) {
       <p>The block reward is now <b style="color:var(--btc)">₿ ${u[9]}</b>. Your power bill didn't change. The market rolled a <b>${roll}</b>: bitcoin ${pct >= 0 ? 'jumps' : 'drops'} <b style="color:${pct >= 0 ? 'var(--cash)' : 'var(--alarm)'}">${pct >= 0 ? '+' : ''}${pct}%</b>.</p>
       <div class="choices"><button class="btn btn-p">Keep mining</button></div>`);
     speak(`Halving. The block reward is now ${u[9]} bitcoin.`);
-    $('#modal button').onclick = () => { E.choose(0); closeModal(); tip('halving'); };
+    $('#modal button').onclick = () => { E.choose(0); closeModal(); tip('halving'); setTimeout(() => tipNudge('halving', 'Another halving survived', 'If the game showed you why halvings matter, the tip jar takes any amount, even 21 sats.'), 2500); };
     return;
   } else if (id === 21) {
     openModal(`<div class="evhead"><div class="die" id="die">?</div><div class="evt"><h2>Ignite the core</h2><span class="dim">The end of the ladder</span></div></div>
@@ -1934,8 +1939,9 @@ function closingCard(u) {
     <p>That's the rule this whole game runs on: mining profits attract hashrate, and hashrate competes the profit away. Miners end up spending roughly what the block reward is worth, whether on power, machines or something else.</p>
     <div class="rows"><div class="row"><span>Bitcoin</span><b class="num">${btcf(u[1])}</b></div><div class="row"><span>Cash</span><b class="num">${money(u[0])}</b></div><div class="row"><span>Sites</span><b class="num">${u[562]}</b></div><div class="row"><span>Halvings survived</span><b class="num">${u[14]}</b></div></div>
     <p class="note">The core was the game's one fantasy. Everything below it on the ladder was as real as we could make it, and the last three rungs say so when they aren't.</p>
-    <div class="choices" style="flex-direction:row;flex-wrap:wrap"><button class="btn btn-p" data-a="new">New run</button><button class="btn" data-a="keep">Keep mining</button><button class="btn" data-a="ledger">Open the ledger</button></div>`);
+    <div class="choices" style="flex-direction:row;flex-wrap:wrap"><button class="btn btn-p" data-a="new">New run</button><button class="btn" data-a="keep">Keep mining</button><button class="btn" data-a="ledger">Open the ledger</button><button class="btn" data-a="tip">${ic('heart')}Support the game</button></div>`);
   const m = $('#modal');
+  m.querySelector('[data-a=tip]').onclick = () => openDonate(() => closingCard(u));
   m.querySelector('[data-a=new]').onclick = () => { overShown = false; newRunScreen(); };
   m.querySelector('[data-a=keep]').onclick = () => { E.keep_mining(); overShown = false; closeModal(); setSpeed(1); };
   m.querySelector('[data-a=ledger]').onclick = () => openLedger('core');
@@ -1983,26 +1989,111 @@ $('#b-ledger').onclick = () => openLedger();
 $('#b-sites').onclick = () => openSites();
 updateLedgerBadge();
 // ------------------------------------------------------------------ support the game: a Lightning tip jar
+// Value for value: the game is free, and paying is a lesson, not a gate. A first Lightning payment
+// unlocks a ledger card and gold containers. The game asks a real wallet for a real invoice, then checks
+// the preimage the player pastes back with SHA-256, the same proof every Lightning node relies on.
 const TIP_ADDR = 'inertmaid12@walletofsatoshi.com';
+const TIP_LNURL = 'https://walletofsatoshi.com/.well-known/lnurlp/inertmaid12';
+const TIP_AMOUNTS = [21, 210, 2100, 21000];
+let tipInv = null; // { pr, sats, hash }
+try { tipInv = JSON.parse(localStorage.getItem('pg-inv') || 'null'); } catch (_) { tipInv = null; }
+const BECH = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+// The payment hash is tagged field 'p' (value 1) in a BOLT11 invoice: 52 five-bit words, 256 bits.
+function invoiceHash(pr) {
+  try {
+    const s = pr.toLowerCase(), cut = s.lastIndexOf('1'), w = [...s.slice(cut + 1, -6)].map((c) => BECH.indexOf(c));
+    for (let i = 7; i < w.length - 104;) {
+      const type = w[i], len = w[i + 1] * 32 + w[i + 2];
+      if (type === 1 && len === 52) {
+        let acc = 0, bits = 0, hex = '';
+        for (const v of w.slice(i + 3, i + 3 + 52)) { acc = (acc << 5) | v; bits += 5; while (bits >= 8) { bits -= 8; hex += ((acc >> bits) & 255).toString(16).padStart(2, '0'); } }
+        return hex.slice(0, 64);
+      }
+      i += 3 + len;
+    }
+  } catch (_) {}
+  return '';
+}
+async function sha256hex(hex) {
+  const b = new Uint8Array(hex.match(/../g).map((h) => parseInt(h, 16)));
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', b));
+  return [...d].map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+async function fetchInvoice(sats, note) {
+  const meta = await (await fetch(TIP_LNURL)).json();
+  const url = new URL(meta.callback); url.searchParams.set('amount', String(sats * 1000));
+  if (note && meta.commentAllowed) url.searchParams.set('comment', note.slice(0, meta.commentAllowed));
+  const r = await (await fetch(url)).json();
+  if (!r.pr) throw new Error(r.reason || 'No invoice');
+  return { pr: r.pr, sats, hash: invoiceHash(r.pr) };
+}
+const fmtSats = (n) => n.toLocaleString('en-US') + ' sats';
+const satsUsd = (n) => { if (!market || !market.price) return ''; const usd = n / 1e8 * market.price; return ` · about ${usd < 0.995 ? Math.max(1, Math.round(usd * 100)) + '¢' : money(usd)}`; };
+function paidLightning(verified) {
+  try { localStorage.setItem('pg-tipped', String(Date.now())); } catch (_) {}
+  tipInv = null; try { localStorage.removeItem('pg-inv'); } catch (_) {}
+  const first = !ledger.lightning;
+  unlockGoal('lightning');
+  if (first) { settings.gold = true; saveSettings(); applySkin(); }
+  toast(verified ? 'Payment proven' : 'Thank you', verified ? 'The preimage matches the invoice: that\'s a Lightning receipt nobody can fake. Gold containers are on (Settings).' : 'Thanks for supporting the game. Gold containers are on (Settings).', 'var(--btc)', '', 'heart');
+}
+function applySkin() { if (E.set_skin) E.set_skin(settings.gold && ledger.lightning ? 1 : 0); }
 function openDonate(back) {
+  const inv = tipInv;
+  const qr = inv ? PGQR.svg(inv.pr.toUpperCase(), 220) : `<img src="donate-qr.png" alt="Lightning QR code for ${TIP_ADDR}" width="220" height="220">`;
   openModal(`<div class="mh"><h2>Support Power Grid</h2><button class="ib" data-x aria-label="Close">${ic('x')}</button></div>
-    <p>Power Grid is free to play, with no ads and no tracking. If it taught you something about mining, you can send a tip in bitcoin over Lightning. Any amount helps.</p>
+    <p>Power Grid is free to play, with no ads and no tracking. If it taught you something about mining, pay what you want over Lightning.${ledger.lightning ? '' : ' Your first payment adds the Lightning card to your ledger and turns your containers gold.'}</p>
+    <div class="amts" role="group" aria-label="Amount">${TIP_AMOUNTS.map((a) => `<button class="btn ${inv && inv.sats === a ? 'on' : ''}" data-sats="${a}">${a.toLocaleString('en-US')}</button>`).join('')}<input class="codein" type="number" min="1" inputmode="numeric" placeholder="Other" aria-label="Other amount in sats" data-k="custom"><span class="dim">sats</span></div>
+    <input class="codein note" maxlength="140" placeholder="Note to the developer (optional)" aria-label="Note" data-k="note">
     <div class="donate">
-      <img src="donate-qr.png" alt="Lightning QR code for ${TIP_ADDR}" width="220" height="220">
+      <span class="qr">${qr}</span>
       <div class="addr">
-        <small>Lightning address</small>
-        <b class="num">${TIP_ADDR}</b>
-        <div class="row"><a class="btn btn-p" href="lightning:${TIP_ADDR}">${ic('bolt')}Open in wallet</a><button class="btn" data-a="copy">Copy address</button></div>
-        <small>Scan the code with any Lightning wallet, such as Wallet of Satoshi, Phoenix, Strike or Cash App, or paste the address into its send screen.</small>
+        ${inv ? `<small>Invoice for ${fmtSats(inv.sats)}${satsUsd(inv.sats)}</small><b class="num inv">${inv.pr.slice(0, 24)}…</b>`
+        : `<small>Lightning address · any amount</small><b class="num">${TIP_ADDR}</b>`}
+        <div class="row"><a class="btn btn-p" href="lightning:${inv ? inv.pr : TIP_ADDR}">${ic('bolt')}Open in wallet</a><button class="btn" data-a="copy">${inv ? 'Copy invoice' : 'Copy address'}</button></div>
+        <small>Scan with any Lightning wallet, such as Wallet of Satoshi, Phoenix, Strike or Cash App. ${inv ? 'The invoice is good for a few minutes.' : 'Or pick an amount above for an invoice.'}</small>
       </div>
-    </div>`, !back); // from the start screen, Escape must not strand you on an empty map
+    </div>
+    ${inv && inv.hash ? `<div class="proof"><b>Paid? Prove it the Lightning way</b>
+      <small>After paying, your wallet holds a <i>preimage</i>: the secret that unlocked this payment, usually under the payment details. Paste it and the game checks it against the invoice.</small>
+      <div class="row"><input class="codein" data-k="pre" placeholder="Preimage (64 hex characters)" aria-label="Preimage" spellcheck="false" autocomplete="off"><button class="btn" data-a="check">Check</button></div>
+      <button class="linkbtn" data-a="honor">My wallet doesn't show it, I've paid</button></div>`
+    : `<button class="linkbtn" data-a="honor">${ledger.lightning ? 'I sent another tip' : 'I\'ve sent a tip'}</button>`}`, !back);
   const m = $('#modal');
   m.querySelector('[data-x]').onclick = back || closeModal;
-  m.querySelector('[data-a=copy]').onclick = (e) => {
-    const b = e.currentTarget;
-    const done = () => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy address'; }, 1500); };
-    try { navigator.clipboard.writeText(TIP_ADDR).then(done, () => toast('Lightning address', TIP_ADDR, 'var(--btc)')); } catch (_) { toast('Lightning address', TIP_ADDR, 'var(--btc)'); }
+  const make = async (sats) => {
+    if (!(sats >= 1)) return;
+    m.querySelectorAll('[data-sats]').forEach((b) => b.disabled = true);
+    try { tipInv = await fetchInvoice(sats, m.querySelector('[data-k=note]').value.trim()); try { localStorage.setItem('pg-inv', JSON.stringify(tipInv)); } catch (_) {} openDonate(back); }
+    catch (_) { m.querySelectorAll('[data-sats]').forEach((b) => b.disabled = false); toast('Couldn\'t reach the wallet', 'No invoice right now. The Lightning address still works: scan it and pick the amount in your wallet.', 'var(--alarm)'); }
   };
+  m.querySelectorAll('[data-sats]').forEach((b) => b.onclick = () => make(+b.dataset.sats));
+  m.querySelector('[data-k=custom]').onkeydown = (e) => { if (e.key === 'Enter') make(Math.floor(+e.target.value)); };
+  m.querySelector('[data-k=custom]').onchange = (e) => make(Math.floor(+e.target.value));
+  m.querySelector('[data-a=copy]').onclick = (e) => {
+    const b = e.currentTarget, t = inv ? inv.pr : TIP_ADDR, label = b.textContent;
+    const done = () => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = label; }, 1500); };
+    try { navigator.clipboard.writeText(t).then(done, () => toast('Copy this', t, 'var(--btc)')); } catch (_) { toast('Copy this', t, 'var(--btc)'); }
+  };
+  const chk = m.querySelector('[data-a=check]');
+  if (chk) chk.onclick = async () => {
+    const v = m.querySelector('[data-k=pre]').value.trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(v)) { toast('Not a preimage', 'A preimage is 64 characters of 0–9 and a–f.', 'var(--alarm)'); return; }
+    let h = ''; try { h = await sha256hex(v); } catch (_) {}
+    if (h && h === inv.hash) { paidLightning(true); back ? back() : closeModal(); }
+    else toast('That doesn\'t match', 'SHA-256 of that preimage isn\'t this invoice\'s payment hash. Check you copied the preimage, not the payment hash.', 'var(--alarm)');
+  };
+  m.querySelector('[data-a=honor]').onclick = () => { paidLightning(false); back ? back() : closeModal(); };
+}
+// Natural high points get one gentle mention each per run, and never within two weeks of a tip.
+let nudged = {};
+function tipNudge(key, title, body) {
+  if (nudged[key]) return; nudged[key] = 1;
+  let last = 0; try { last = +(localStorage.getItem('pg-tipped') || 0); } catch (_) {}
+  if (Date.now() - last < 14 * 864e5) return;
+  const t = el('div', { class: 'toast act', style: '--tc:var(--btc)' }, `<span class="ti">${ic('heart')}</span><div><b>${title}</b><span>${body}</span><button class="btn mini">Tip jar</button></div>`);
+  t.querySelector('button').onclick = () => { t.remove(); openDonate(); };
+  $('#toasts').prepend(t); setTimeout(() => t.remove(), 14000);
 }
 $('#b-donate').onclick = () => openDonate();
 
@@ -2199,6 +2290,7 @@ function askTutorial() {
 function afterStart() {
   try { seenTips = JSON.parse(localStorage.getItem('pg-tips') || '{}'); } catch (_) { seenTips = {}; }
   ['#hud', '#pill', '#speed', '#dock'].forEach((s) => $(s).hidden = false);
+  nudged = {}; applySkin();
   overShown = false; shownEvent = -1; fit(); setSpeed(1); viewMask = 0; viewAuto = 0; applyView(); renderDock(); running = true;
 }
 

@@ -153,6 +153,16 @@ for g, (top, mid, dk) in enumerate(GENS):
     T.TOP, T.MID, T.DK = top, mid, dk
     m.container(0.06, 0.2, w=0.88, d=0.6, h=13)
     add(f'B_MINER{g + 1}', m)
+# gold containers: the cosmetic for a first Lightning payment. Each generation keeps its own shade of gold.
+GOLD = [((240, 204, 96), (214, 172, 64), (150, 112, 34)),
+        ((236, 190, 110), (206, 158, 76), (142, 100, 44)),
+        ((226, 196, 120), (192, 160, 84), (128, 100, 46)),
+        ((214, 168, 70), (178, 134, 44), (112, 80, 22))]
+for g, (top, mid, dk) in enumerate(GOLD):
+    m = scratch(); pads(m, 1, 1)
+    T.TOP, T.MID, T.DK = top, mid, dk
+    m.container(0.06, 0.2, w=0.88, d=0.6, h=13)
+    add(f'B_MINERG{g + 1}', m)
 T.TOP, T.MID, T.DK = GENS[0]
 
 m = scratch(); pads(m, 1, 1); m.fanwall(0, 0.3, 1, 0.4); add('B_FAN', m)
