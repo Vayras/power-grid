@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-13.30';
+const BUILD = 'build 2026-11-13.31';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -683,7 +683,7 @@ function drainToasts(u) {
       case 26: toast('Lightning strike', arg ? 'A bolt hit a miner box and set it on fire.' : 'A bolt hit a miner box. Its health took a beating.', 'var(--alarm)', 'lightning', 'storm'); break;
       case 27: { const W = [['Skies cleared', 'Back to normal.', 'var(--cash)'], ['Rain', 'Cooler air (−4 °C), weak solar. Rain rinses some dust off.', 'var(--hash)'], ['Thunderstorm', 'Turbines lock, solar is near zero, and lightning can hit your boxes.', 'var(--alarm)'], ['Dust storm', 'Grit clogs filters fast. Dusty boxes run hot. Clean them after.', 'var(--btc)']][arg]; toast(W[0], W[1], W[2]); if (arg === 3) tip('dust'); if (arg === 2) tip('storm'); break; }
       case 28: toast('Cleaned', `${arg} ${arg === 1 ? 'box' : 'boxes'} blown out with compressed air.`, 'var(--cash)'); break;
-      case 29: toast('You found a block, solo', `A whole block: ${btcf(arg)}. No pool, no fee.`, 'var(--btc)', 'block', 'cube'); sfx('block'); rememberBlock(u, arg); pendingLab = arg; setTimeout(() => tipNudge('solo', 'A solo block', 'Real solo miners wait years for one. If you enjoyed finding it, the tip jar is open.'), 4000); break;
+      case 29: toast('You found a block, solo', `A whole block: ${btcf(arg)}. No pool, no fee.`, 'var(--btc)', 'block', 'cube'); sfx('block'); rememberBlock(u, arg); pendingLab = arg; setTimeout(() => tipNudge('A solo block', 'Real solo miners wait years for one. If you enjoyed finding it, the tip jar is open.'), 4000); break;
       case 30: toast(arg ? 'Mining solo' : 'Back in the pool', arg ? 'No more steady payouts. You get paid only when you find a block yourself.' : 'Steady payouts every block for your share, minus 2%.', 'var(--btc)'); if (arg) tip('solo'); break;
       case 23: toast('Nothing to clear', 'Only trees and rubble can be cleared.', 'var(--muted)'); break;
       case 31: toast('Fee spike', `The mempool is jammed: fees ×${arg.toFixed(arg < 10 ? 1 : 0)}. Every block now pays ${btcf(u[297] + u[23])}. Fees are paid on top of the block reward.`, 'var(--btc)', 'fees', 'stack'); sfx('coin'); tip('fees'); break;
@@ -1950,7 +1950,7 @@ function showEvent(id, u) {
       <p>The block reward is now <b style="color:var(--btc)">₿ ${u[9]}</b>. Your power bill didn't change. The market rolled a <b>${roll}</b>: bitcoin ${pct >= 0 ? 'jumps' : 'drops'} <b style="color:${pct >= 0 ? 'var(--cash)' : 'var(--alarm)'}">${pct >= 0 ? '+' : ''}${pct}%</b>.</p>
       <div class="choices"><button class="btn btn-p">Keep mining</button></div>`);
     speak(`Halving. The block reward is now ${u[9]} bitcoin.`);
-    $('#modal button').onclick = () => { E.choose(0); closeModal(); tip('halving'); setTimeout(() => tipNudge('halving', 'Another halving survived', 'If the game showed you why halvings matter, the tip jar takes any amount, even 21 sats.'), 2500); };
+    $('#modal button').onclick = () => { E.choose(0); closeModal(); tip('halving'); setTimeout(() => tipNudge('Another halving survived', 'If the game showed you why halvings matter, the tip jar takes any amount, even 21 sats.'), 2500); };
     return;
   } else if (id === 21) {
     openModal(`<div class="evhead"><div class="die" id="die">?</div><div class="evt"><h2>Ignite the core</h2><span class="dim">The end of the ladder</span></div></div>
@@ -2131,16 +2131,24 @@ function openDonate(back) {
     else toast('That doesn\'t match', 'SHA-256 of that preimage isn\'t this invoice\'s payment hash. Check you copied the preimage, not the payment hash.', 'var(--alarm)');
   };
 }
-// Natural high points get one gentle mention each per run, and never within two weeks of a tip.
-let nudged = {};
-function tipNudge(key, title, body) {
-  if (nudged[key]) return; nudged[key] = 1;
+// One gentle mention of the tip jar per visit, and never within two weeks of a proven tip. It comes at a random
+// moment between 6 and 20 minutes of actual play, or at a high point (a halving survived, a solo block) if that is sooner.
+let nudgeDone = false; try { nudgeDone = !!sessionStorage.getItem('pg-nudged'); } catch (_) {}
+function tipNudge(title, body) {
+  if (nudgeDone) return;
   let last = 0; try { last = +(localStorage.getItem('pg-tipped') || 0); } catch (_) {}
+  nudgeDone = true; try { sessionStorage.setItem('pg-nudged', '1'); } catch (_) {}
   if (Date.now() - last < 14 * 864e5) return;
   const t = el('div', { class: 'toast act', style: '--tc:var(--btc)' }, `<span class="ti">${ic('heart')}</span><div><b>${title}</b><span>${body}</span><button class="btn mini">Tip jar</button></div>`);
   t.querySelector('button').onclick = () => { t.remove(); openDonate(); };
   $('#toasts').prepend(t); setTimeout(() => t.remove(), 14000);
 }
+{ const at = (6 + Math.random() * 14) * 60; let played = 0;
+  setInterval(() => {
+    if (nudgeDone || !running || !speed || document.hidden || !$('#modal-wrap').hidden || !$('#memo').hidden) return;
+    played += 5;
+    if (played >= at) tipNudge('Enjoying Power Grid?', 'It\'s free, with no ads and no tracking. If you\'d like to support it, the tip jar takes any amount over Lightning.');
+  }, 5000); }
 $('#b-donate').onclick = () => openDonate();
 
 $('#b-learn').onclick = () => {
@@ -2336,7 +2344,7 @@ function askTutorial() {
 function afterStart() {
   try { seenTips = JSON.parse(localStorage.getItem('pg-tips') || '{}'); } catch (_) { seenTips = {}; }
   ['#hud', '#pill', '#speed', '#dock'].forEach((s) => $(s).hidden = false);
-  nudged = {}; hushed = {};
+  hushed = {};
   overShown = false; shownEvent = -1; fit(); setSpeed(1); viewMask = 0; viewAuto = 0; applyView(); renderDock(); running = true;
 }
 
