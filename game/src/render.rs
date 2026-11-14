@@ -614,7 +614,9 @@ impl Renderer {
         self.list.clear();
         for (x, b) in g.blds.iter().enumerate() {
             let k = KINDS[b.kind as usize];
-            let depth = ((b.i as u32 + b.j as u32 + k.w as u32 + k.d as u32) * 16).saturating_sub(1);
+            // depth = footprint centre (i + w/2) + (j + d/2), like trees and workers. The old front-corner key tied a
+            // 2x2 with the 1x1 beside it, and whichever was built last drew over the other.
+            let depth = (2 * (b.i as u32 + b.j as u32) + k.w as u32 + k.d as u32) * 8;
             self.list.push((depth, 0, x as u16));
         }
         for j in 0..MAP { for i in 0..MAP {

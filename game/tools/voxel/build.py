@@ -99,7 +99,10 @@ def write(out):
     lines.append('];')
     lines.append('pub static EMIT: [(i16, i16); %d] = [%s];' % (len(emit_all), ', '.join(f'({a}, {b})' for a, b in emit_all)))
     open(f'{ROOT}/src/sprites.rs', 'w').write('\n'.join(lines) + '\n')
-    json.dump({n: list(rects[n][:4]) for n in names}, open(f'{ROOT}/web/sprites.json', 'w'))
+    def solid(n):   # bounding box of the solid pixels (the baked ground shadow is at most ~42% alpha)
+        bb = out[names.index(n)][1].getchannel('A').point(lambda v: 255 if v > 150 else 0).getbbox() or (0, 0, rects[n][2], rects[n][3])
+        return [bb[0], bb[1], bb[2] - bb[0], bb[3] - bb[1]]
+    json.dump({n: list(rects[n][:4]) + solid(n) for n in names}, open(f'{ROOT}/web/sprites.json', 'w'))
     sz = os.path.getsize(f'{ROOT}/web/atlas.png')
     print('atlas', W, H, 'sprites', len(names), 'emitters', len(emit_all), f'{sz / 1024:.0f} KB')
 

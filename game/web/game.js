@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-14.35';
+const BUILD = 'build 2026-11-14.36';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -137,7 +137,7 @@ window.PG = { get E() { return E; }, UI, finale: () => showFinale(UI()) };
 // ------------------------------------------------------------------ canvas + loop
 const canvas = $('#view');
 const ctx = canvas.getContext('2d', { alpha: false });
-let zoom = innerWidth >= 900 ? 2 : 1, fbW = 0, fbH = 0, fbD = 0, imgData = null;
+let zoom = innerWidth >= 900 ? 1.5 : 1, fbW = 0, fbH = 0, fbD = 0, imgData = null;
 // The voxel atlas has two densities: 1 (a tile is 64 px) and 2 (128 px). A tile shows 64*zoom CSS px, so the
 // framebuffer is CSS size * density / zoom. Use the hi-res density when the screen has the pixels for it and
 // the frame stays under ~3.2 MP; the browser scales the frame smoothly.
@@ -234,7 +234,13 @@ canvas.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' &
 let mouseAt = null;
 canvas.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; });
 canvas.addEventListener('wheel', (e) => { e.preventDefault(); setZoom(zoom + (e.deltaY < 0 ? 1 : -1)); }, { passive: false });
-function setZoom(z) { z = Math.max(1, Math.min(4, z)); if (z === zoom) return; zoom = z; fit(); }
+// Zoom steps. The voxel atlas is drawn at 2x, so zoom 1 is pixel-sharp on a retina screen and zoom 2 on a 1x
+// screen; past 2 the art only gets blurrier. Callers pass zoom +/- 1, which means one step in or out.
+const ZOOMS = [1, 1.5, 2];
+function setZoom(z) {
+  const k = ZOOMS.indexOf(zoom), n = z > zoom ? Math.min(ZOOMS.length - 1, k + 1) : Math.max(0, k - 1);
+  if (ZOOMS[n] === zoom) return; zoom = ZOOMS[n]; fit();
+}
 addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'r' || e.key === 'R') { if (tool === 14) { E.rotate_tool(); E.sync_ui(); showPlacebar(); } else if (inspOpen && UI()[81] === 14) { E.rotate_sel(); E.sync_ui(); renderInspector(true); } }
@@ -450,11 +456,16 @@ $('#b-layers').onclick = (e) => { e.stopPropagation(); layersOpen($('#layers').h
 $('#layers-x').onclick = () => layersOpen(false);
 $('#layers-x').innerHTML = ic('x');
 addEventListener('pointerdown', (e) => { if (!$('#layers').hidden && !e.target.closest('#layers,#b-layers')) layersOpen(false); });
-function thumb(sprName, boxH) {
-  const r = SPR[sprName]; const sc = Math.min(1, (boxH - 4) / r[3], 110 / r[2]);
-  return `<i style="width:${r[2]}px;height:${r[3]}px;background-position:-${r[0]}px -${r[1]}px;transform:scale(${sc});transform-origin:bottom center;margin-bottom:2px"></i>`;
+// sprites.json: [x, y, w, h, sx, sy, sw, sh], the last four the solid part (no baked ground shadow), so a
+// thumbnail shows the building at a useful size instead of its whole shadow
+function thumb(sprName, boxH, boxW = 110) {
+  const r = SPR[sprName]; const [x, y, w, h] = r.length > 4 ? [r[0] + r[4], r[1] + r[5], r[6], r[7]] : r;
+  const sc = Math.min(1, (boxH - 6) / h, (boxW - 6) / w);
+  return `<i style="width:${w}px;height:${h}px;background-position:-${x}px -${y}px;transform:scale(${sc});transform-origin:bottom center;margin-bottom:${Math.round(3 - h * (1 - sc) * 0)}px"></i>`;
 }
-const syncDockH = () => { const d = $('#dock'); if (d && !d.hidden) document.documentElement.style.setProperty('--dock-h', d.offsetHeight + 'px'); };
+// the inspector stacks under the Foreman's note on desktop: keep its height in a CSS variable
+if (window.ResizeObserver) new ResizeObserver(() => document.documentElement.style.setProperty('--memo-h', ($('#memo').offsetHeight || 0) + 'px')).observe($('#memo'));
+const syncDockH = () => { const d = $('#dock'); if (d && !d.hidden) document.documentElement.style.setProperty('--dock-h', (innerWidth <= 720 ? d.offsetHeight : 0) + 'px'); };
 addEventListener('resize', () => setTimeout(syncDockH, 50));
 function renderDock() {
   const u = UI(); const box = $('#items'); box.innerHTML = '';
@@ -500,7 +511,7 @@ function renderDock() {
     let sub = isPow(idx) ? power(CAP[idx][0]) + ' · ' + (idx === 0 ? `$${u[305]}/MWh ${u[512] === 5 && !u[318] ? 'flare gas' : 'contract'}. ${u[512] === 0 || u[318] ? 'Brownouts and curtailment calls.' : k.desc}` : k.desc) : k.desc;
     if (idx === 20) sub = k.desc + `<br><span class="dim">Heat sells for $${u[390].toFixed(1)}/MWh today${u[394] ? ` · yours: ${money(u[392])}/day` : ''}</span>`;
     if (isMiner(idx)) { const ec = econ(idx, u); sub = k.desc + `<br><b style="color:${ec.profit > 0 ? 'var(--cash)' : 'var(--alarm)'}">${ec.profit > 0 ? '+' : '−'}${money(Math.abs(ec.profit))}/day</b> · ${ec.profit > 0 ? 'pays back in ' + days(ec.payback) : 'loses money at $' + Math.round(ec.pp) + '/MWh'}<br><span class="dim">${u[330 + idx - 10] > 0 ? `Used ${money(u[326 + idx - 10])} · ${u[330 + idx - 10]} for sale` : 'No used ones for sale'} · real ≈ ${money(u[308 + idx - 10])}</span>`; }
-    b.innerHTML = `<span class="thumb">${thumb(k.spr, innerWidth < 720 ? 44 : 52)}</span><span class="n">${k.name}</span><span class="s">${sub}</span>` +
+    b.innerHTML = `<span class="thumb">${innerWidth <= 720 ? thumb(k.spr, 44) : thumb(k.spr, 64, 68)}</span><span class="n">${k.name}</span><span class="s">${sub}</span>` +
       (unlocked ? `<span class="c">${idx === CLEAR ? 'from $150' : money(cost)}</span>` : `<span class="lockt">${ic('lock')} ${isPow(idx) ? 'Max out ' + nameList(parentsOf(idx)) : UNLOCK_HINT[idx] || ''}</span>`);
     b.onclick = () => { if (!unlocked) { sfx('bad'); toast('Locked', isPow(idx) ? `Upgrade a ${nameList(parentsOf(idx))} to level 3 first.` : UNLOCK_HINT[idx] + '.', 'var(--muted)'); return; } setTool(tool === idx ? -1 : idx); };
     box.appendChild(b);
@@ -652,10 +663,9 @@ function renderInspector(force) {
 }
 function positionInspector() {
   const u = UI(); const box = $('#inspector'); const r = canvas.getBoundingClientRect();
-  if (innerWidth < 720) { box.style.left = '10px'; box.style.right = '10px'; box.style.width = 'auto'; box.style.top = 'auto'; box.style.bottom = 'calc(var(--dock-h,170px) + 64px + env(safe-area-inset-bottom,0px))'; return; }
-  const x = u[91] * r.width / fbW, y = u[92] * r.height / fbH;
-  box.style.left = Math.min(innerWidth - 272, Math.max(10, x + 30)) + 'px';
-  box.style.top = Math.max(64, Math.min(innerHeight - box.offsetHeight - $('#dock').offsetHeight - 24, Math.max(80, y - 70))) + 'px';
+  // desktop: the right-hand panel, placed by CSS. Phones: a sheet above the build dock.
+  if (innerWidth > 720) { box.style.left = box.style.right = box.style.top = box.style.bottom = box.style.width = ''; return; }
+  box.style.left = '8px'; box.style.right = '8px'; box.style.width = 'auto'; box.style.top = 'auto'; box.style.bottom = 'calc(var(--dock-h,170px) + 18px + env(safe-area-inset-bottom,0px))';
 }
 
 // ------------------------------------------------------------------ toasts
@@ -2309,7 +2319,7 @@ $('#b-menu').onclick = () => {
 let pickDiff = 0, pickSeed = (Math.random() * 2 ** 32) >>> 0, pickSite = 0;
 try { pickSite = Math.min(5, Math.max(0, +(localStorage.getItem('pg-site') || 0))); } catch (_) {}
 function newRunScreen() {
-  running = running && false; ['#hud', '#pill', '#speed', '#rail', '#layers', '#dock', '#np', '#status'].forEach((s) => $(s).hidden = true); statusHtml = ''; $('#memo').hidden = true; memoResume = false; stopSpeaking(); closeInspector(); setTool(-1);
+  running = running && false; ['#topbar', '#hud', '#pill', '#speed', '#rail', '#layers', '#dock', '#np', '#status'].forEach((s) => $(s).hidden = true); statusHtml = ''; $('#memo').hidden = true; memoResume = false; stopSpeaking(); closeInspector(); setTool(-1);
   const has = !!localStorage.getItem('pg-save');
   E.set_site(pickSite); E.preview_seed(pickSeed); redraw = true; const u = UI();
   const tr = [['River', u[30] ? 'Yes: a dam is possible' : 'None: wind opens deep geothermal directly', u[30] ? 'var(--hash)' : 'var(--alarm)'],
@@ -2365,7 +2375,7 @@ function askTutorial() {
 }
 function afterStart() {
   try { seenTips = JSON.parse(localStorage.getItem('pg-tips') || '{}'); } catch (_) { seenTips = {}; }
-  ['#hud', '#pill', '#speed', '#rail', '#dock'].forEach((s) => $(s).hidden = false);
+  ['#topbar', '#hud', '#pill', '#speed', '#rail', '#dock'].forEach((s) => $(s).hidden = false);
   hushed = {};
   overShown = false; shownEvent = -1; fit(); setSpeed(1); viewMask = 0; viewAuto = 0; applyView(); renderDock(); running = true;
 }

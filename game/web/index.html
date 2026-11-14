@@ -11,12 +11,13 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&display=swap">
-<link rel="stylesheet" href="style.css?v=35">
+<link rel="stylesheet" href="style.css?v=36">
 </head>
 <body>
 <canvas id="view" aria-label="The plant, seen from above" role="img"></canvas>
 
-<div id="hud" class="card" hidden>
+<header id="topbar" hidden>
+<div id="hud" hidden>
   <button class="cell" id="h-cash" title="Cash"><span class="lbl">Cash</span><span class="num v">$0</span></button>
   <button class="cell" id="h-btc" title="Sell bitcoin"><span class="lbl">Bitcoin</span><span class="num v">₿ 0</span></button>
   <button class="cell" id="h-spend" title="What you spend per day: power and crew"><span class="lbl">Spend / day</span><span class="num v">$0</span></button>
@@ -26,14 +27,7 @@
   <button class="cell" id="h-px" title="What is this?"><span class="lbl">BTC</span><span class="num v">$0</span></button>
 </div>
 
-<button id="pill" class="pill" hidden aria-label="Open the network: mempool, blocks and charts"><span id="p-text"></span><span class="bar"><i id="p-bar"></i></span><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 7h12M2 11h9M2 15h5"/></svg></button>
-
-<div id="speed" class="pill" hidden>
-  <button class="ib" id="b-play" aria-label="Pause"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3v10M11 3v10"/></svg></button>
-  <button class="ib" id="b-skip" aria-pressed="false" aria-label="Skip ahead to the next thing that needs you" title="Skip ahead (F): top speed until an event, an alarm, a milestone or the cash for the next rung"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3l5 5-5 5zM8 3l5 5-5 5zM14 3v10"/></svg></button>
-  <label class="spd" title="Game speed"><input type="range" id="spd" min="0" max="100" step="1" value="31" aria-label="Game speed" aria-describedby="spd-t"><span id="spd-t" class="num">36 s a day</span></label>
-  <button class="ib" id="b-menu" aria-label="Menu"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/></svg></button>
-</div>
+<button id="pill" hidden aria-label="Open the network: mempool, blocks and charts"><span id="p-text"></span><span class="bar"><i id="p-bar"></i></span><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 7h12M2 11h9M2 15h5"/></svg></button>
 
 <div id="rail" hidden>
   <button class="ib" id="b-ledger" aria-label="Ledger: goals and how mining really works" data-n="0"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h5l1 1 1-1h5v12H9l-1 1-1-1H2zM8 3v11"/></svg></button>
@@ -42,19 +36,26 @@
   <button class="ib" id="b-learn" aria-label="Foreman's notes"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 5V3h6v4L8 9v2M8 13v2"/></svg></button>
   <button class="ib" id="b-donate" aria-label="Support the game" title="Support the game"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14L2 8V4l2-2h2l2 2 2-2h2l2 2v4z"/></svg></button>
 </div>
+<div id="speed" hidden>
+  <button class="ib" id="b-play" aria-label="Pause"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3v10M11 3v10"/></svg></button>
+  <button class="ib" id="b-skip" aria-pressed="false" aria-label="Skip ahead to the next thing that needs you" title="Skip ahead (F): top speed until an event, an alarm, a milestone or the cash for the next rung"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3l5 5-5 5zM8 3l5 5-5 5zM14 3v10"/></svg></button>
+  <label class="spd" title="Game speed"><input type="range" id="spd" min="0" max="100" step="1" value="31" aria-label="Game speed" aria-describedby="spd-t"><span id="spd-t" class="num">36 s a day</span></label>
+  <button class="ib" id="b-menu" aria-label="Menu"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/></svg></button>
+</div>
+</header>
 
-<div id="dock" class="card" hidden>
+<aside id="dock" class="glass" hidden>
   <div id="tabs" role="tablist">
     <button role="tab" data-tab="power" aria-selected="true">Power</button>
     <button role="tab" data-tab="miners">Miners</button>
     <button role="tab" data-tab="cooling">Cooling</button>
     <button role="tab" data-tab="site">Site</button>
-    <button id="b-ladder">Power tree</button>
   </div>
   <div id="items"></div>
-</div>
+  <button id="b-ladder">Power tree</button>
+</aside>
 
-<div id="layers" class="card" hidden>
+<div id="layers" class="glass" hidden>
   <div class="lh">Map view<button class="ib" id="layers-x" aria-label="Close">×</button></div>
   <div id="views" role="group" aria-label="Map views">
       <button data-view="1" aria-pressed="false" title="Airflow: where fans blow and how hot each box is"><span><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h9V3M1 9h12v2M1 13h6"/></svg></span>Airflow</button>
@@ -63,7 +64,7 @@
     </div>
 </div>
 
-<div id="placebar" class="card" hidden>
+<div id="placebar" class="glass" hidden>
   <span id="pb-text"></span>
   <span id="pb-mode" class="seg mini" role="tablist" aria-label="Buy new or used" hidden></span>
   <button class="btn" id="pb-rot" hidden>↻ Turn</button>
@@ -71,21 +72,21 @@
   <button class="btn" id="pb-cancel">Cancel</button>
 </div>
 
-<div id="inspector" class="card" hidden></div>
+<div id="inspector" class="glass" hidden></div>
 <div id="status" hidden aria-live="polite"></div>
 <div id="hovertip" hidden></div>
-<button id="np" class="pill" hidden aria-label="Skip to the next song"><span class="lbl">Foreman FM</span><span id="np-t"></span><span id="np-skip"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l6 5-6 5zM12 3v10"/></svg></span></button>
+<button id="np" class="glass" hidden aria-label="Skip to the next song"><span class="lbl">Foreman FM</span><span id="np-t"></span><span id="np-skip"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l6 5-6 5zM12 3v10"/></svg></span></button>
 <div id="toasts" aria-live="polite"></div>
 <div id="why" hidden></div>
-<div id="memo" class="memo" hidden></div>
+<div id="memo" class="memo glass" hidden></div>
 <div id="modal-wrap" hidden><div id="modal" class="card" role="dialog" aria-modal="true"></div></div>
 
 <div id="boot"><div class="boot-title">Power Grid</div><div class="boot-bar"><i id="boot-bar"></i></div><div id="boot-msg">Loading the plant…</div></div>
 
-<script src="music.js?v=35"></script>
-<script src="history.js?v=35"></script>
-<script src="qr.js?v=35"></script>
-<script src="game.js?v=35"></script>
+<script src="music.js?v=36"></script>
+<script src="history.js?v=36"></script>
+<script src="qr.js?v=36"></script>
+<script src="game.js?v=36"></script>
 <div id="finale" hidden></div>
 </body>
 </html>
