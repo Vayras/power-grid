@@ -507,7 +507,7 @@ unsafe fn fill_ui(gg: &Game, rr: &Renderer) {
             let si = rr.sel as usize; u[466] = if is_miner(b.kind) { b.reject() } else { 0.0 };
             u[387] = gg.gh_kw.get(si).copied().unwrap_or(0.0); u[388] = gg.piped.iter().filter(|p| **p == si as i32).count() as f64;
             u[389] = gg.piped.get(si).map_or(0.0, |p| (*p >= 0) as u8 as f64);
-            u[234] = b.health as f64; u[235] = gg.sell_value(rr.sel as usize); u[236] = gg.service_cost(rr.sel as usize);
+            u[234] = b.health as f64; u[235] = gg.sell_value(rr.sel as usize); u[236] = gg.service_cost(rr.sel as usize); u[582] = gg.service_capped(rr.sel as usize) as u8 as f64;
             u[89] = u[235];
             u[237] = if b.net == u16::MAX { -1.0 } else { b.net as f64 };
             if let Some(nt) = gg.nets.get(b.net as usize) {

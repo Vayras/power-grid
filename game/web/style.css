@@ -483,10 +483,11 @@ details.xp p{font-size:13px;margin:2px 0 8px !important}
 #topbar,#layers,#dock,#placebar,#inspector,#status,#toasts,#np,#memo,#hovertip,canvas{-webkit-user-select:none;user-select:none}
 
 /* ---------------------------------------------------------------- responsive */
-@media (max-width:1760px){#hud #h-px{display:none}}
-@media (max-width:1620px){#hud #h-spend{display:none}#spd-t{display:none}}
+/* the BTC price always stays; spend and power give way first (both are in the Power panel too) */
+@media (max-width:1760px){#hud #h-spend{display:none}}
+@media (max-width:1620px){#hud #h-pow{display:none}#spd-t{display:none}}
 @media (max-width:1320px){#spd{width:72px}}
-@media (max-width:1100px) and (min-width:721px){#hud #h-pow{display:none}#dock{width:270px}#status,#toasts,#np{left:calc(294px + var(--safe-l))}#placebar{left:calc(50% + 141px)}#inspector{width:290px}}
+@media (max-width:1100px) and (min-width:721px){#hud #h-btc{display:none}#dock{width:270px}#status,#toasts,#np{left:calc(294px + var(--safe-l))}#placebar{left:calc(50% + 141px)}#inspector{width:290px}}
 @media (max-width:960px) and (min-width:721px){#hud #h-hash{display:none}#pill{display:none!important}}
 @media (max-width:720px){
   /* top bar wraps: money on top, network + time underneath; tools become a column on the right */
@@ -495,7 +496,8 @@ details.xp p{font-size:13px;margin:2px 0 8px !important}
   #hud .cell{padding:0 9px;height:44px;flex:1}
   #hud .v{font-size:13px;line-height:18px}
   #hud #h-cash .v{font-size:18px;line-height:22px}
-  #hud #h-pow,#hud #h-spend,#hud #h-px{display:none}
+  #hud #h-pow,#hud #h-spend,#hud #h-hash{display:none}
+  #hud #h-px{order:2}
   #pill{margin:0;flex:1;padding:8px 12px;font-size:12px}
   #speed{margin-left:auto}
   #speed .ib{width:34px;height:34px}
@@ -517,7 +519,8 @@ details.xp p{font-size:13px;margin:2px 0 8px !important}
   #b-ladder{padding:9px;font-size:12px}
   #placebar{left:50%;bottom:calc(var(--dock-h,170px) + 18px + var(--safe-b));max-width:calc(100vw - 16px);white-space:normal;flex-wrap:wrap;border-radius:20px}
   #status{left:calc(8px + var(--safe-l));top:auto;bottom:calc(var(--dock-h,170px) + 18px + var(--safe-b));width:auto;max-width:calc(100vw - 16px);flex-direction:row;overflow-x:auto}
-  #status .st{flex:none;font-size:12px}
+  #status{align-items:flex-end}
+  #status .st,#status .steps{flex:none;font-size:12px;max-width:calc(100vw - 32px)}
   #toasts{left:calc(8px + var(--safe-l));bottom:auto;top:calc(124px + var(--safe-t));width:calc(100vw - 76px)}
   #memo{left:calc(8px + var(--safe-l));right:auto;bottom:auto;top:calc(124px + var(--safe-t));width:calc(100vw - 76px)}
   body:has(#memo:not([hidden])) #inspector{top:auto;max-height:calc(100vh - var(--dock-h,170px) - 160px)}
@@ -539,7 +542,7 @@ details.xp p{font-size:13px;margin:2px 0 8px !important}
   .mtable td:last-child .btn{font-size:0;padding:4px 8px}
   .mtable td:last-child .btn::after{content:'Buy 5';font-size:12px}
 }
-@media (max-width:420px){#hud #h-hash{display:none}}
+@media (max-width:420px){#hud .cell{padding:0 6px}#hud .v{font-size:12.5px}}
 @media (max-width:560px){.tree{grid-template-columns:1fr}}
 @media (max-width:520px){.donate{justify-content:center}.donate img{width:200px;height:200px}.tutpick{grid-template-columns:1fr}}
 @media (max-width:380px){#speed .ib{width:30px}#spd{width:40px}#hud .cell{padding:0 6px}}

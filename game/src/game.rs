@@ -622,7 +622,7 @@ impl Game {
         let b = &self.blds[idx];
         if !is_miner(b.kind) { return 0.0; }
         let price = self.new_price(b.kind); // parts cost what the market says
-        if b.broken != 0 { price * 0.22 } else { price * 0.15 * (1.0 - b.health as f64 / 100.0) }
+        if b.broken != 0 { price * 0.22 } else { price * 0.10 * (1.0 - b.health as f64 / 100.0) }
     }
 
     /// Miners go to a broker at today's used price, less their cut, scaled by condition (a dead one is sold
@@ -795,7 +795,13 @@ impl Game {
             if self.techs == 0 { c += CALLOUT_USD * 0.5 * self.st().callout; }
             for p in 0..3 { let from_shelf = (b.dead[p] as u32).min(self.spares[p]); c += (b.dead[p] as u32 - from_shelf) as f64 * PART_USD[p]; }
         }
-        c
+        // never more than buying the same box used: past that the shop just swaps in a refurbished one
+        fmin(c, self.used_price(b.kind).max(CLEAN_COST))
+    }
+    /// True when the service quote hit the cap (a used replacement is as cheap).
+    pub fn service_capped(&self, idx: usize) -> bool {
+        let b = match self.blds.get(idx) { Some(b) if is_miner(b.kind) && b.broken == 0 => b, _ => return false };
+        self.service_cost(idx) >= self.used_price(b.kind).max(CLEAN_COST) - 0.5
     }
     pub fn service(&mut self, idx: usize) {
         let c = self.service_cost(idx); if c <= 0.0 { return; }

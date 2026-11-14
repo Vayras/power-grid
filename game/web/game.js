@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-15.39';
+const BUILD = 'build 2026-11-15.40';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -618,7 +618,7 @@ function renderInspector(force) {
       ${u[249] > 0 ? `<div class="row warn"><span>${ic('shield')} Outside your fence. Raiders can steal it.</span></div>` : ''}
       ${(() => { // one service visit covers everything wrong with the box; say what it includes
         const jobs = broken ? ['rebuilt from dead'] : [hp < 99.5 ? `health ${hp.toFixed(0)}% → 100%` : '', u[289] >= 5 ? 'clean' : '', u[509] > 0 ? `${u[506] + u[507] + u[508]} failed part${u[506] + u[507] + u[508] === 1 ? '' : 's'}` : ''].filter(Boolean);
-        return u[236] > 0 ? `<div class="row" style="font-size:12px"><span>${ic('wrench')} Service: ${jobs.join(' · ')}</span><b>${money(u[236])}</b></div>` : ''; })()}
+        return u[236] > 0 ? `<div class="row" style="font-size:12px"><span>${ic('wrench')} Service: ${jobs.join(' · ')}${u[582] ? ' <span class="dim">(capped: a used replacement costs the same)</span>' : ''}</span><b>${money(u[236])}</b></div>` : ''; })()}
       <div class="acts">${u[236] > 0 ? `<button class="btn btn-p" data-a="service">${ic('wrench')}${broken ? 'Rebuild' : 'Service'} ${money(u[236])}</button>` : ''}${broken ? '' : sw}${sell('Sell to a broker')}</div>`;
   } else if (isPow(kind)) {
     const next = lvl < 3 && kind !== 9 ? CAP[kind][lvl] : 0;
