@@ -25,7 +25,8 @@ pub const K_GREENHOUSE: u8 = 20;
 // The renewable branch's late nodes: real research today, built nowhere.
 pub const K_DEEPGEO: u8 = 21;
 pub const K_ORBITAL: u8 = 22;
-pub const N_KINDS: usize = 23;
+pub const K_BATTERY: u8 = 23;
+pub const N_KINDS: usize = 24;
 pub const N_TIERS: usize = 10;
 
 #[derive(Clone, Copy)]
@@ -87,7 +88,17 @@ pub static KINDS: [Kind; N_KINDS] = [
     pw(2, 2, S::B_DEEPGEO, 600_000.0, 800_000.0, 1_000_000.0, [80_000.0, 120_000.0, 160_000.0], 4.0, false),
     // orbital solar: sunlight collected in orbit and beamed to a ground station, day and night (game)
     pw(2, 2, S::B_ORBITAL, 2_200_000.0, 2_800_000.0, 3_600_000.0, [120_000.0, 200_000.0, 300_000.0], 0.0, false),
+    // battery bank: cap_kw is how fast it charges or discharges; BATT_MWH how much it holds
+    Kind { w: 1, d: 1, sprite: S::B_BATTERY, cost: 8_000.0, up2: 10_000.0, up3: 14_000.0, cap_kw: [500.0, 1_000.0, 2_000.0], usd_mwh: 0.0, th: 0.0, kw: 0.0, coal_pad: false, pad: true, reach: 0, electric: true },
 ];
+/// Storage per battery bank by level, MWh.
+pub const BATT_MWH: [f64; 3] = [2.0, 5.0, 10.0];
+/// Round-trip efficiency: 10% is lost going in and out.
+pub const BATT_EFF: f64 = 0.9;
+/// Batteries discharge before any paid source: their stored power already cost nothing.
+pub const BATT_USD: f64 = 0.5;
+/// Only cheap power is worth storing (renewables, hydro, nuclear), not diesel or gas.
+pub const BATT_CHARGE_MAX_USD: f64 = 15.0;
 
 /// A utility only allots a site so much: this many grid hookups, and after that you make your own power.
 /// It is what makes the ladder worth climbing before the halvings do.
@@ -151,6 +162,7 @@ pub const CLEAR_RUBBLE: f64 = 120.0;
 
 pub fn is_power(k: u8) -> bool { k <= K_CORE || k == K_DEEPGEO || k == K_ORBITAL }
 pub fn is_miner(k: u8) -> bool { (K_MINER1..=K_MINER4).contains(&k) }
+pub fn is_battery(k: u8) -> bool { k == K_BATTERY }
 pub fn is_consumer(k: u8) -> bool { is_miner(k) || k == K_FAN || k == K_IMMERSION }
 
 // Random events

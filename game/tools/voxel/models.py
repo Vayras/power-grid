@@ -502,6 +502,21 @@ def truck():
     return m
 
 
+def battery():
+    """Battery bank: two white utility-scale battery cabinets and an inverter on a pad."""
+    m = Model(1, 1, 26, res=T, seed=94); pad(m)
+    for y0 in (4, 17):
+        m.box(3, y0, 1, 25, y0 + 11, 14, (236, 238, 238), jit=0.015, var=((226, 228, 230), 0.15))
+        m.box(3, y0, 14, 25, y0 + 11, 15, (210, 214, 216))
+        for x in range(5, 24, 3):                      # door seams + vents on the visible long side
+            m.box(x, y0 + 11, 2, x + 0.6, y0 + 11.5, 13, (190, 194, 198))
+        m.box(4, y0 + 11, 10.5, 24, y0 + 11.5, 11.5, (46, 160, 96))   # green stripe
+        m.box(25, y0 + 2, 9, 25.6, y0 + 4, 11, (80, 240, 140), glow=1.0)  # status light
+    m.box(26.5, 9, 1, 31, 22, 9, (150, 156, 162))      # inverter / transformer
+    for y in (11, 15, 19): m.box(31, y, 3, 31.5, y + 2, 7, (110, 116, 122))
+    return m
+
+
 # ---------------------------------------------------------------- the full list, in atlas order
 def all_sprites():
     """Yield (name, model, kind) with kind in {'ground', 'tree', 'point', 'building'}."""
@@ -542,3 +557,4 @@ def all_sprites():
     yield 'WORKER0', worker(0), 'point'
     yield 'WORKER1', worker(1), 'point'
     yield 'TRUCK', truck(), 'building'
+    yield 'B_BATTERY', battery(), 'building'

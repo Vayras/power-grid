@@ -247,6 +247,8 @@ pub extern "C" fn switch_site(k: u32) {
 /// Crew and spares.
 #[no_mangle] pub extern "C" fn set_crew(techs: u32, guards: u32) { g().set_crew(techs, guards); }
 #[no_mangle] pub extern "C" fn set_staff(cleaners: u32, mechanics: u32) { g().set_staff(cleaners, mechanics); }
+/// Sell surplus power to the city: on/off and the lowest $/MWh you'll take.
+#[no_mangle] pub extern "C" fn set_sell(on: u32, floor: f64) { g().set_sell(on != 0, floor); }
 #[no_mangle] pub extern "C" fn buy_upgrade(bit: u32) -> u32 { let gg = g(); let r = gg.buy_upgrade(bit); r }
 #[no_mangle] pub extern "C" fn buy_spares(part: u32, n: u32) { g().buy_spares(part as usize, n); }
 #[no_mangle] pub extern "C" fn set_spare_target(part: u32, n: u32) { g().set_spare_target(part as usize, n); }
@@ -429,7 +431,7 @@ unsafe fn fill_world() {
                 let wages = gm.wages();
                 let alerts = gm.blds.iter().filter(|b| is_miner(b.kind) && (b.broken != 0 || b.parts_out() > 0)).count() as u32 + gm.short_nets + gm.unpowered;
                 u[o] = gm.site as f64; u[o + 1] = gm.my_th; u[o + 2] = gm.used_kw; u[o + 3] = gm.cap_kw;
-                u[o + 4] = gm.rev_day - gm.cost_day + gm.heat_day() - wages; u[o + 5] = alerts as f64;
+                u[o + 4] = gm.rev_day - gm.cost_day + gm.heat_day() + gm.export_day - wages; u[o + 5] = alerts as f64;
                 u[o + 6] = gm.blds.iter().filter(|b| is_miner(b.kind)).count() as f64;
             } else { for x in 0..7 { u[o + x] = -1.0; } }
         }
@@ -445,7 +447,7 @@ unsafe fn fill_world() {
 unsafe fn fill_ui(gg: &Game, rr: &Renderer) {
     unsafe {
         let u = &mut UI;
-        u[0] = gg.cash; u[1] = gg.btc; u[2] = gg.price; u[3] = gg.rev_day - gg.cost_day + gg.heat_day() - gg.techs as f64 * TECH_WAGE - gg.guards as f64 * GUARD_WAGE; u[4] = gg.used_kw; u[5] = gg.cap_kw;
+        u[0] = gg.cash; u[1] = gg.btc; u[2] = gg.price; u[3] = gg.rev_day - gg.cost_day + gg.heat_day() + gg.export_day - gg.wages(); u[4] = gg.used_kw; u[5] = gg.cap_kw;
         u[6] = gg.block as f64; u[7] = gg.next_retarget.saturating_sub(gg.block) as f64; u[8] = (HALVING - gg.block % HALVING) as f64;
         u[9] = gg.reward; u[10] = gg.last_retarget; u[11] = gg.my_th; u[12] = gg.net_th; u[13] = gg.streak as f64;
         u[14] = gg.halvings as f64; u[15] = gg.day as f64; u[16] = gg.ambient(); u[17] = SPEED as f64;
@@ -562,6 +564,10 @@ unsafe fn fill_ui(gg: &Game, rr: &Renderer) {
         { let (mut n, mut hs, mut low) = (0.0, 0.0, 0.0); for b in gg.blds.iter() { if is_miner(b.kind) && b.broken == 0 { n += 1.0; hs += b.health as f64; if b.health < 70.0 { low += 1.0; } } }
           u[577] = if n > 0.0 { hs / n } else { 100.0 }; u[578] = low; }
         u[579] = CLEANER_CLEANS as f64; u[580] = MECH_SERVICES as f64; u[581] = MECH_HEAL as f64;
+        // batteries and selling power (build .41, u[583..593])
+        u[583] = gg.batt_mwh; u[584] = gg.batt_cap; u[585] = gg.batt_flow; u[586] = gg.feed_now;
+        u[587] = gg.sell_on as u8 as f64; u[588] = gg.sell_floor; u[589] = gg.export_day; u[590] = gg.export_usd; u[591] = gg.export_mwh;
+        u[592] = (!gg.st().flare) as u8 as f64; u[593] = gg.export_kw;
         u[502] = TECH_WAGE; u[503] = GUARD_WAGE; u[504] = TECH_SWAPS as f64; u[505] = CALLOUT_USD;
         u[510] = boxes as f64; u[511] = gg.parts_lost_th;
         u[512] = gg.site as f64; u[513] = gg.well_f; u[514] = (gg.st().dry && gg.dry_season()) as u8 as f64; u[515] = gg.grid_f();

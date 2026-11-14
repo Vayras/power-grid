@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-15.40';
+const BUILD = 'build 2026-11-15.41';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -32,6 +32,7 @@ const KINDS = [
 const CLEAR = 100;
 KINDS[21] = { name: 'Deep geothermal', tab: 'power', spr: 'B_DEEPGEO', desc: 'Game: wells 15 km down to superhot rock. $4/MWh, steady', game: true };
 KINDS[22] = { name: 'Orbital solar', tab: 'power', spr: 'B_ORBITAL', desc: 'Game: sunlight beamed down from orbit, day and night. Free', game: true };
+KINDS[23] = { name: 'Battery bank', tab: 'power', spr: 'B_BATTERY', desc: 'Stores cheap surplus power and runs your boxes at night. 2 MWh · 500 kW, up to 10 MWh · 2 MW' };
 // The power tree (same as TREE in data.rs): node -> parents; maxing ANY parent opens the node.
 // Diesel is open from the start. Fossil: gas, coal. Renewable: solar, wind, hydro, deep geo, orbital. Nuclear opens from coal or wind.
 const TREE = { 0: [], 1: [], 2: [0], 3: [2], 4: [0], 5: [4], 6: [5], 21: [6], 22: [21], 7: [3, 5], 8: [7], 9: [8, 22] };
@@ -48,8 +49,9 @@ const kindOf = (k) => (k === CLEAR ? CLEAR_ITEM : KINDS[k]);
 const isMiner = (k) => k >= 10 && k <= 13;
 const PAINT = (k) => k === 18 || k === CLEAR;
 const CAP = [[250, 600, 1200], [500, 1000, 2000], [2000, 5000, 10000], [10000, 20000, 40000], [5000, 12000, 25000], [8000, 16000, 30000], [20000, 40000, 80000], [50000, 100000, 150000], [200000, 350000, 500000], [Infinity, Infinity, Infinity]];
-const UNLOCK_HINT = { 12: 'Max out the grid hookup', 13: 'Max out gas or solar', 15: 'Max out gas or solar' };
-CAP[21] = [80000, 120000, 160000]; CAP[22] = [120000, 200000, 300000];
+const UNLOCK_HINT = { 23: 'Max out the grid hookup', 12: 'Max out the grid hookup', 13: 'Max out gas or solar', 15: 'Max out gas or solar' };
+CAP[21] = [80000, 120000, 160000]; CAP[22] = [120000, 200000, 300000]; CAP[23] = [500, 1000, 2000];
+const BATT_MWH = [2, 5, 10];
 const DIRN = ['→ south-east', '↓ south-west', '← north-west', '↑ north-east'];
 const EVENTS = {
   0: { t: 'Heatwave', c: 'var(--alarm)', d: '+9 °C for 3 days. Air-cooled miners throttle above 80 °C and can break above 95 °C.' },
@@ -499,9 +501,12 @@ function renderDock() {
         own.map((t) => `<span class="s">${KINDS[t].name} ×${t === 21 ? u[566] : t === 22 ? u[568] : u[70 + t]} · best Lv ${t === 21 ? u[567] : t === 22 ? u[569] : u[60 + t]}/3</span>`).join('') +
         (u[70] > 0 ? `<span class="s">${u[512] === 5 && !u[318] ? 'Genset: flare gas' : 'Grid: ' + CONTRACTS[u[346]].t.toLowerCase()}${u[346] === 1 ? ` · $${Math.round(u[347])}/MWh now` : ` · $${u[305]}/MWh`}</span>` : '') +
         `<button class="btn btn-p mini" data-up>${u[29] > 0 ? 'Upgrade ' + money(u[29]) : 'All maxed'}</button>` +
-        (u[70] > 0 ? `<button class="btn mini" data-ct>Power contract</button>` : '');
+        (u[584] > 0 ? `<span class="s">Batteries ${u[583].toFixed(1)} / ${u[584].toFixed(0)} MWh${u[585] > 1 ? ' · charging' : u[585] < -1 ? ' · supplying' : ''}</span>` : '') +
+        (u[592] ? `<span class="s">${u[587] ? `Selling surplus · $${Math.round(u[586])}/MWh now${u[589] > 0 ? ` · +${money(u[589])}/day` : ''}` : 'Not selling surplus power'}</span>` : '') +
+        (u[70] > 0 ? `<button class="btn mini" data-ct>Power contract</button>` : '') + (u[592] ? `<button class="btn mini" data-sp>Sell to the city</button>` : '');
       c.querySelector('[data-up]').onclick = (e) => { e.stopPropagation(); if (E.select_upgradable()) { E.sync_ui(); openInspector(); tip('upgrade'); } };
       const ct = c.querySelector('[data-ct]'); if (ct) ct.onclick = (e) => { e.stopPropagation(); openContract(); };
+      const sp = c.querySelector('[data-sp]'); if (sp) sp.onclick = (e) => { e.stopPropagation(); openSellPower(); };
       box.appendChild(c);
     }
   }
@@ -522,7 +527,7 @@ function renderDock() {
     c.querySelector('[data-mkt]').onclick = (e) => { e.stopPropagation(); openMarket(); };
     box.appendChild(c);
   }
-  const list = tab === 'power' ? LADDER.map((idx) => [KINDS[idx], idx]) : KINDS.map((k, idx) => [k, idx]); if (tab === 'site') list.push([CLEAR_ITEM, CLEAR]);
+  const list = tab === 'power' ? [LADDER[0], LADDER[1], 23, ...LADDER.slice(2)].map((idx) => [KINDS[idx], idx]) : KINDS.map((k, idx) => [k, idx]); if (tab === 'site') list.push([CLEAR_ITEM, CLEAR]);
   list.forEach(([k, idx]) => {
     if (k.tab !== tab) return;
     const unlocked = idx === CLEAR || u[430 + idx] > 0;
@@ -620,12 +625,22 @@ function renderInspector(force) {
         const jobs = broken ? ['rebuilt from dead'] : [hp < 99.5 ? `health ${hp.toFixed(0)}% → 100%` : '', u[289] >= 5 ? 'clean' : '', u[509] > 0 ? `${u[506] + u[507] + u[508]} failed part${u[506] + u[507] + u[508] === 1 ? '' : 's'}` : ''].filter(Boolean);
         return u[236] > 0 ? `<div class="row" style="font-size:12px"><span>${ic('wrench')} Service: ${jobs.join(' · ')}${u[582] ? ' <span class="dim">(capped: a used replacement costs the same)</span>' : ''}</span><b>${money(u[236])}</b></div>` : ''; })()}
       <div class="acts">${u[236] > 0 ? `<button class="btn btn-p" data-a="service">${ic('wrench')}${broken ? 'Rebuild' : 'Service'} ${money(u[236])}</button>` : ''}${broken ? '' : sw}${sell('Sell to a broker')}</div>`;
+  } else if (kind === 23) {
+    const pct = u[584] > 0 ? u[583] / u[584] * 100 : 0, flow = u[585];
+    h += `<span class="tag">Level ${lvl}/3</span></div>
+      <div class="row"><span>Charge (all banks)</span>${bar(pct, 'var(--pos)')}<b>${u[583].toFixed(1)} / ${u[584].toFixed(0)} MWh</b></div>
+      <div class="row"><span>Right now</span><b style="color:${flow > 1 ? 'var(--pos)' : flow < -1 ? 'var(--btc)' : 'var(--muted)'}">${flow > 1 ? 'Charging ' + power(flow) : flow < -1 ? 'Supplying ' + power(-flow) : 'Idle'}</b></div>
+      <div class="row"><span>This bank</span><b>${BATT_MWH[lvl - 1]} MWh · ${power(CAP[23][lvl - 1])}${lvl < 3 ? ` → <span style="color:var(--hash)">${BATT_MWH[lvl]} MWh · ${power(CAP[23][lvl])}</span>` : ''}</b></div>
+      <div class="row" style="font-size:12px"><span>Fills from spare solar, wind, hydro or nuclear on its network (not diesel or gas), then runs your boxes when that power is gone. At the evening peak it can sell to the city too. 10% is lost going in and out.</span></div>
+      ${netRows(u)}
+      <div class="acts">${u[88] > 0 ? `<button class="btn btn-p big" data-a="up">${ic('up')}Upgrade to level ${lvl + 1} · ${money(u[88])}</button>` : '<span class="tag" style="color:var(--hash)">Max level</span>'}<button class="btn" data-a="sellpower">${ic('bolt')}Sell to the city</button>${sw}${sell('Sell')}</div>`;
   } else if (isPow(kind)) {
     const next = lvl < 3 && kind !== 9 ? CAP[kind][lvl] : 0;
     h += `<span class="tag">Level ${lvl}/3</span></div>
       <div class="row"><span>Capacity</span><b style="color:var(--volt)">${power(u[90])}${next ? ` → <span style="color:var(--hash)">${power(next)}</span>` : ''}</b></div>
       <div class="row"><span>Running cost</span><b>${kind === 0 && u[346] === 1 ? `$${Math.round(u[347])}/MWh spot` : u[94] ? '$' + u[94] + '/MWh' : 'free'}</b></div>
       ${kind === 0 ? `<div class="row"><span>Contract</span><button class="btn mini" data-a="contract">${CONTRACTS[u[346]].t}</button></div>` : ''}
+      ${u[592] ? `<div class="row"><span>Sell to the city</span><button class="btn mini" data-a="sellpower">${u[587] ? (u[593] > 1 ? `Selling ${power(u[593])}` : `On · $${Math.round(u[586])}/MWh now`) : 'Off'}</button></div>` : ''}
       ${netRows(u)}
       ${lvl === 2 && childrenOf(kind).length ? `<div class="row" style="font-size:12px;color:var(--hash)"><span>Level 3 unlocks ${childrenOf(kind).map((c) => KINDS[c].name.toLowerCase()).join(' and ')}.</span></div>` : ''}
       ${k.game ? `<div class="row" style="font-size:12px"><span>Not real: this rung is the game's. ${whyBtn(kind === 21 ? 'deepgeo' : kind === 22 ? 'orbital' : kind === 8 ? 'fusion' : 'site')}</span></div>` : ''}
@@ -676,6 +691,7 @@ function renderInspector(force) {
     if (a === 'clean') { E.clean_sel(); sfx('clean'); }
     if (a === 'sell') { E.sell_sel(); sfx('cash'); closeInspector(); return; }
     if (a === 'contract') { openContract(); return; }
+    if (a === 'sellpower') { openSellPower(); return; }
     if (a === 'fix') { E.fix_sel(); sfx('repair'); }
     if (a === 'service') { E.service_sel(); sfx('repair'); }
     if (a === 'crew') { openCrew(); return; }
@@ -1418,6 +1434,30 @@ function openCrew() {
   m.querySelectorAll('[data-buy]').forEach((b) => b.onclick = () => { E.buy_spares(+b.dataset.buy, 5); sfx('cash'); E.sync_ui(); drainToasts(UI()); openCrew(); });
   m.querySelectorAll('[data-up]').forEach((b) => b.onclick = () => { if (E.buy_upgrade(+b.dataset.up)) sfx('build'); else sfx('bad'); E.sync_ui(); drainToasts(UI()); openCrew(); });
   const w = m.querySelector('[data-a=worst]'); if (w) w.onclick = () => { if (E.select_worst_parts()) { E.sync_ui(); closeModal(); openInspector(); } };
+}
+
+// ------------------------------------------------------------------ selling power to the city
+function openSellPower() {
+  E.sync_ui(); const u = UI();
+  const on = !!u[587], floor = u[588];
+  const FLOORS = [0, 15, 25, 35, 50, 75, 100];
+  openModal(`<div class="mh"><div><h2>Sell to the city</h2><span class="dim">Through your grid hookups</span></div><button class="ib" data-x aria-label="Close">${ic('x')}</button></div>
+    <p class="lead">Whatever your generators can still make after your own boxes (solar, wind, hydro, gas, coal, nuclear, anything) goes to the city when it pays more than your floor <i>and</i> more than that power costs you to make. What's left, if it was cheap, fills your batteries. At the evening peak the batteries sell too.</p>
+    <div class="tiles">
+      <div class="tile"><span>City pays now</span><b class="num">$${Math.round(u[586])}/MWh</b><small>About half your contract at midday and overnight, nearly double at the 17:00–21:00 peak. Heatwaves and brownouts push it up.</small></div>
+      <div class="tile"><span>Selling now</span><b class="num">${u[593] > 1 ? power(u[593]) : '—'}</b><small>${u[589] > 0 ? `≈ ${money(u[589])}/day at this rate` : on ? (u[586] < floor ? 'Below your floor: storing instead' : 'No spare power on a grid-hooked network') : 'Selling is off'}</small></div>
+      <div class="tile"><span>Sold so far</span><b class="num">${money(u[590])}</b><small>${u[591].toFixed(1)} MWh</small></div>
+      <div class="tile"><span>Batteries</span><b class="num">${u[584] > 0 ? `${u[583].toFixed(1)} / ${u[584].toFixed(0)} MWh` : 'None'}</b><small>${u[584] > 0 ? (u[585] > 1 ? `Charging ${power(u[585])}` : u[585] < -1 ? `Supplying ${power(-u[585])}` : 'Idle') : 'Build a battery bank (Power tab) to keep cheap power for later'}</small></div>
+    </div>
+    <div class="set">
+      <div class="setrow"><span><b>Sell surplus power</b><small>Only from networks with a grid hookup, up to the hookups' size.</small></span><button class="sw" role="switch" aria-checked="${on}" data-a="toggle"></button></div>
+      <div class="setrow"><span><b>Lowest price you'll take</b><small>Below this the city gets nothing and the batteries fill instead. $0 sells whenever it beats your cost.</small></span>
+        <span class="seg" role="tablist">${FLOORS.map((f) => `<button data-f="${f}" aria-selected="${Math.abs(floor - f) < 0.5}">$${f}</button>`).join('')}</span></div>
+    </div>`, true);
+  const m = $('#modal'); m.classList.add('wide');
+  m.querySelector('[data-x]').onclick = closeModal;
+  m.querySelector('[data-a=toggle]').onclick = () => { E.set_sell(on ? 0 : 1, floor); sfx('tap'); openSellPower(); };
+  m.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => { E.set_sell(on ? 1 : 0, +b.dataset.f); sfx('tap'); openSellPower(); });
 }
 
 // ------------------------------------------------------------------ power contracts

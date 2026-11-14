@@ -155,6 +155,13 @@ Upload `web/` to any static host. Make sure `.wasm` is served as `application/wa
   fixed, shaped by hour, gas, heat and brownouts, spikes in emergencies; boxes switch off at their own break-even
   or above a flat limit), or Fixed + demand response ($3/MWh standby credit, calls switch you off automatically).
   Any change runs at least 30 days.
+- **Batteries and selling power (Power tab, opens with the grid maxed):** a battery bank (2 / 5 / 10 MWh, 500 kW / 1 /
+  2 MW) fills from spare cheap power on its network (solar, wind, hydro, nuclear; not diesel or gas) and runs the boxes
+  when that power is gone; 10% is lost going in and out. **Sell to the city** exports whatever any generator can still
+  make, through the grid hookups on the same network and up to their size, whenever the city's feed-in price beats both
+  your floor and what that power costs you. The feed-in price is about half the contract at midday and overnight and
+  nearly double at the 17:00-21:00 peak; heatwaves and brownouts push it up. North Dakota's flare-gas site has no grid
+  to sell into.
 - **Firmware (tap a miner):** five profiles, Low / Eco / Stock / Turbo / Max: 70–128% hashrate for 55–162%
   power. Overclocking runs hotter and wears faster; any custom profile costs a 2% fee. Saved in the high bits of
   each building's direction byte, so older saves load as Stock.

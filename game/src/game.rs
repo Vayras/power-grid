@@ -132,6 +132,9 @@ pub struct Game {
     pub wages_paid: f64, pub parts_lost_th: f64,
     // maintenance staff and one-off site upgrades (UP_* bits)
     pub cleaners: u32, pub mechanics: u32, pub upgrades: u32,
+    // batteries (one shared store) and selling surplus power to the city through the grid hookups
+    pub batt_mwh: f64, pub batt_cap: f64, pub batt_flow: f64,
+    pub sell_on: bool, pub sell_floor: f64, pub feed_now: f64, pub export_day: f64, pub export_kw: f64, pub export_usd: f64, pub export_mwh: f64,
     // where in the world: SITES index; well_f = a flare-gas well's output left (North Dakota)
     pub site: u8, pub well_f: f64, pub tariffs: u32,
     // several sites: a follower copies the network and wallet from the lead site; day_off keeps the calendar shared
@@ -179,6 +182,7 @@ impl Game {
             pool: 0, pool_switches: 0, acc_th: 0.0, pplns_paid: 0.0, pplns_exp: 0.0, pool_blocks: 0,
             techs: 0, guards: 0, spares: [0; 3], spare_target: [0; 3], fails: [0; 3], swapped: [0; 3], wages_paid: 0.0, parts_lost_th: 0.0,
             cleaners: 0, mechanics: 0, upgrades: 0,
+            batt_mwh: 0.0, batt_cap: 0.0, batt_flow: 0.0, sell_on: true, sell_floor: 0.0, feed_now: 0.0, export_day: 0.0, export_kw: 0.0, export_usd: 0.0, export_mwh: 0.0,
             site, well_f: 1.0, tariffs: 0, follower: false, day_off: 0, unlocked_x: [false; 2], milestones: 0, core_tries: 0,
         };
         g.grid_usd = SITES[site as usize].grid + GRID_EXTRA[diff.min(2) as usize];
@@ -294,7 +298,7 @@ impl Game {
         for b in self.blds.iter() {
             if b.net == u16::MAX { continue; }
             let nt = &mut self.nets[b.net as usize];
-            if is_power(b.kind) { nt.sources += 1; }
+            if is_power(b.kind) || is_battery(b.kind) { nt.sources += 1; }
             if b.kind == K_POLE { nt.poles += 1; }
             if is_consumer(b.kind) { nt.consumers += 1; }
         }
@@ -363,6 +367,7 @@ impl Game {
             13 => self.branch_done(),
             14 | 17 | 18 | 19 | 20 => true,
             21 | 22 => self.unlocked_x[(kind - 21) as usize],
+            23 => self.unlocked[K_GAS as usize] || self.unlocked[K_SOLAR as usize], // batteries open with the grid maxed, alongside the first renewables
             15 => self.branch_done(),
             _ => false,
         }
@@ -581,7 +586,7 @@ impl Game {
     pub fn upgrade_cost(&self, idx: usize) -> f64 {
         let b = &self.blds[idx];
         let k = KINDS[b.kind as usize];
-        if !(is_power(b.kind) || b.kind == K_WALL) || b.kind == K_CORE { return 0.0; }
+        if !(is_power(b.kind) || b.kind == K_WALL || is_battery(b.kind)) || b.kind == K_CORE { return 0.0; }
         match b.level { 1 => k.up2, 2 => k.up3, _ => 0.0 }
     }
 
@@ -596,7 +601,7 @@ impl Game {
         let (kind, lvl) = (b.kind, b.level);
         { let k = KINDS[kind as usize]; let (bi, bj) = (b.i as i32, b.j as i32); self.fx.push((2, bi, bj, k.w, k.d)); }
         if kind == K_WALL { self.rebuild_security(); return; }
-        if lvl >= 3 { self.open_children(kind); }
+        if lvl >= 3 && is_power(kind) { self.open_children(kind); }
         self.dispatch(false);
     }
 
@@ -837,6 +842,16 @@ impl Game {
     pub fn set_crew(&mut self, techs: u32, guards: u32) {
         self.techs = techs.min(MAX_CREW); self.guards = guards.min(MAX_CREW); self.sync_workers();
     }
+    /// What the nearby city pays for power you feed in right now ($/MWh): cheap at midday when everyone's solar
+    /// floods the grid, cheap overnight, dear at the evening peak; heatwaves and brownouts push it up.
+    pub fn feed_price(&self) -> f64 {
+        if self.st().flare { return 0.0; }
+        let hour = ((self.block - self.start_block) % BLOCKS_PER_DAY) as f64 / 6.0;
+        let shape = if hour < 6.0 { 0.55 } else if hour < 10.0 { 0.85 } else if hour < 15.0 { 0.45 + 0.1 * fabs(hour - 12.5) / 2.5 } else if hour < 17.0 { 0.9 } else if hour < 21.0 { 1.7 } else { 0.8 };
+        let stress = if self.heat_days > 0 { 1.6 } else { 1.0 } * if self.brown_days > 0 { 2.0 } else { 1.0 };
+        self.st().grid * 0.9 * shape * stress
+    }
+    pub fn set_sell(&mut self, on: bool, floor: f64) { self.sell_on = on; self.sell_floor = clamp(floor, 0.0, 500.0); self.dispatch(false); }
     pub fn set_staff(&mut self, cleaners: u32, mechanics: u32) {
         self.cleaners = cleaners.min(MAX_CREW); self.mechanics = mechanics.min(MAX_CREW); self.sync_workers();
     }
@@ -1076,18 +1091,69 @@ impl Game {
             if b.kind == K_GRID && (curtailed || capped) { grid_net[b.net as usize] = true; }
             self.nets[b.net as usize].cap += avail;
         }
+        // batteries: each bank adds charge/discharge power to its own network; they share one store
+        let blk_h = 10.0 / 60.0;
+        let mut batt_kw: Vec<f64> = alloc::vec![0.0; nn]; let mut batt_cap = 0.0;
+        for b in self.blds.iter() {
+            if !is_battery(b.kind) || b.off != 0 || b.net as usize >= nn { continue; }
+            let lv = (b.level.clamp(1, 3) - 1) as usize;
+            batt_kw[b.net as usize] += KINDS[b.kind as usize].cap_kw[lv]; batt_cap += BATT_MWH[lv];
+        }
+        self.batt_cap = batt_cap; if self.batt_mwh > batt_cap { self.batt_mwh = batt_cap; }
+        {
+            let mut store_kw = self.batt_mwh * 1000.0 / blk_h; // what the store can give this block, in kW
+            for x in 0..nn {
+                if batt_kw[x] <= 0.0 { continue; }
+                let avail = fmin(batt_kw[x], store_kw); store_kw -= avail;
+                src.push((BATT_USD, avail, x as u16, K_BATTERY));
+                self.nets[x].cap += avail;
+            }
+        }
         for a in 1..src.len() { let mut x = a; while x > 0 && src[x - 1].0 > src[x].0 { src.swap(x - 1, x); x -= 1; } }
         let mut left: Vec<f64> = self.nets.iter().map(|n| n.demand * (1.0 + n.loss)).collect();
+        let mut took: Vec<f64> = alloc::vec![0.0; src.len()];
         let mut usd_block = 0.0; let mut grid_kw = 0.0; let mut spot_extra = 0.0; let mut grid_usd_block = 0.0;
-        for s in src.iter() {
+        for (si, s) in src.iter().enumerate() {
             let l = &mut left[s.2 as usize];
             if *l <= 0.0 { continue; }
-            let take = fmin(*l, s.1);
+            let take = fmin(*l, s.1); took[si] = take;
             usd_block += take * (10.0 / 60.0) / 1000.0 * s.0;
             if s.3 == K_GRID { grid_kw += take; grid_usd_block += take * (10.0 / 60.0) / 1000.0 * s.0; spot_extra += take * (10.0 / 60.0) / 1000.0 * s.0 * (1.0 - 1.0 / spot); }
             *l -= take;
         }
         if !curtailed && !capped { self.grid_kw = grid_kw; }
+        // surplus: what every generator could still give after your own boxes. Sell it to the city through the grid
+        // hookups on the same network when the feed-in price beats both your floor and what that power costs you;
+        // store what's left (if it was cheap to make) in the batteries. At a good price the batteries sell too.
+        let feed = self.feed_price(); self.feed_now = feed;
+        let can_export = self.sell_on && !self.st().flare && self.brown_days == 0 && !curtailed && feed >= self.sell_floor && feed > 0.0;
+        let mut exp_cap: Vec<f64> = alloc::vec![0.0; nn];
+        for b in self.blds.iter() { if b.kind == K_GRID && (b.net as usize) < nn { exp_cap[b.net as usize] += KINDS[K_GRID as usize].cap_kw[(b.level.clamp(1, 3) - 1) as usize]; } }
+        let mut room_kw = fmax(0.0, (batt_cap - self.batt_mwh) * 1000.0 / blk_h / BATT_EFF); // charging power the store can still take
+        let mut chg_net: Vec<f64> = batt_kw.clone();
+        let (mut sold_kw, mut charge_kw, mut batt_out) = (0.0, 0.0, 0.0);
+        for (si, s) in src.iter().enumerate() {
+            let net = s.2 as usize;
+            if s.3 == K_BATTERY { batt_out += took[si]; chg_net[net] = fmax(0.0, chg_net[net] - took[si]); continue; }
+            if s.3 == K_GRID { continue; }
+            let mut spare = s.1 - took[si];
+            if spare <= 0.0 { continue; }
+            if can_export && feed > s.0 { let q = fmin(spare, exp_cap[net]); exp_cap[net] -= q; spare -= q; sold_kw += q; }
+            if s.0 <= BATT_CHARGE_MAX_USD { let q = fmin(spare, fmin(chg_net[net], room_kw)); chg_net[net] -= q; room_kw -= q; charge_kw += q; }
+        }
+        // batteries sell into the evening peak: only above the floor and only what's left after your own boxes
+        let mut batt_sold = 0.0;
+        if can_export && feed > BATT_CHARGE_MAX_USD * 2.0 {
+            let mut store_kw = fmax(0.0, self.batt_mwh * 1000.0 / blk_h - batt_out);
+            for x in 0..nn {
+                let used_here: f64 = src.iter().enumerate().filter(|(_, s)| s.3 == K_BATTERY && s.2 as usize == x).map(|(i, _)| took[i]).sum();
+                let q = fmin(fmin(fmax(0.0, batt_kw[x] - used_here), exp_cap[x]), store_kw);
+                if q > 0.0 { store_kw -= q; exp_cap[x] -= q; batt_sold += q; }
+            }
+        }
+        let export_kw = sold_kw + batt_sold;
+        self.export_kw = export_kw; self.export_day = export_kw * blk_h / 1000.0 * feed * 144.0;
+        self.batt_flow = charge_kw * BATT_EFF - batt_out - batt_sold;
         let mut short = false; let mut used = 0.0; let mut cap = 0.0; let mut dem = 0.0;
         let mut short_kw = 0.0; let mut short_nets = 0;
         for (x, nt) in self.nets.iter_mut().enumerate() {
@@ -1138,6 +1204,9 @@ impl Game {
             } else { self.btc += btc_block; }
             self.cash -= usd_block;
             self.curtail_extra += spot_extra;
+            // batteries and export
+            self.batt_mwh = clamp(self.batt_mwh + (charge_kw * BATT_EFF - batt_out - batt_sold) * blk_h / 1000.0, 0.0, batt_cap);
+            if export_kw > 0.0 { let mwh = export_kw * blk_h / 1000.0; let v = mwh * feed; self.cash += v; self.export_usd += v; self.export_mwh += mwh; }
             if self.heat_kw > 0.0 { let v = self.heat_kw * (10.0 / 60.0) / 1000.0 * self.heat_price(); self.cash += v; self.heat_earned += v; }
             let mwh = grid_kw * (10.0 / 60.0) / 1000.0;
             self.c_mwh += mwh; self.c_cost += grid_usd_block;
@@ -1644,7 +1713,9 @@ impl Game {
             // build .32: failed core trials
             self.core_tries as f64,
             // build .38: cleaners, mechanics, site upgrades
-            self.cleaners as f64, self.mechanics as f64, self.upgrades as f64];
+            self.cleaners as f64, self.mechanics as f64, self.upgrades as f64,
+            // build .41: batteries and power export
+            self.batt_mwh, self.sell_on as u8 as f64, self.sell_floor, self.export_usd, self.export_mwh];
         // v9+: version, then how many scalars follow, so later builds can append fields without breaking old saves
         f(scal[0]); f((scal.len() - 1) as f64);
         for v in scal.iter().skip(1) { f(*v); }
@@ -1704,6 +1775,7 @@ impl Game {
         g.milestones = if has(113) { fs[113] as u32 } else { u32::MAX };
         if has(114) { g.core_tries = fs[114] as u32; }
         if has(117) { g.cleaners = (fs[115] as u32).min(MAX_CREW); g.mechanics = (fs[116] as u32).min(MAX_CREW); g.upgrades = fs[117] as u32; }
+        if has(122) { g.batt_mwh = fmax(0.0, fs[118]); g.sell_on = fs[119] != 0.0; g.sell_floor = fs[120]; g.export_usd = fs[121]; g.export_mwh = fs[122]; }
         if has(110) { g.follower = fs[109] != 0.0; g.day_off = fs[110] as u64; }
         if has(108) { g.site = (fs[106] as usize).min(N_SITES - 1) as u8; g.well_f = clamp(fs[107], 0.25, 1.0); g.tariffs = fs[108] as u32; }
         if has(105) {
