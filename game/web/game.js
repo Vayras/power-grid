@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-15.42';
+const BUILD = 'build 2026-11-15.43';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -22,7 +22,7 @@ const KINDS = [
   { name: '10× Antminer S21', tab: 'miners', spr: 'B_MINER3', desc: '2.0 PH/s · 35 kW · 17.5 J/TH' },
   { name: '10× S21 XP Hydro', tab: 'miners', spr: 'B_MINER4', desc: '4.73 PH/s · 56.8 kW · 12 J/TH' },
   { name: 'Fan wall', tab: 'cooling', spr: 'B_FAN', desc: 'Blows 4 tiles in one direction. Press R to turn.' },
-  { name: 'Immersion tank', tab: 'cooling', spr: 'B_IMMERSION', desc: '−22 °C to boxes touching it' },
+  { name: 'Immersion tank', tab: 'cooling', spr: 'B_IMMERSION', desc: 'Boxes touching it run in fluid at ~45 °C, whatever the weather. No dust.' },
   { name: 'Garage shed', tab: 'none', spr: 'B_SHED', desc: 'Where it all started' },
   { name: 'Power pole', tab: 'site', spr: 'B_POLE', desc: 'Carries power 4 tiles. +0.4% line loss' },
   { name: 'Wall', tab: 'site', spr: 'B_WALL', desc: 'Drag to lay. Upgrade: wood → stone → steel' },
@@ -607,7 +607,8 @@ function renderInspector(force) {
     const status = broken ? ['Broken', 'var(--alarm)'] : off ? ['Switched off', 'var(--muted)'] : fire ? ['On fire', 'var(--alarm)'] : nopow ? ['No power', 'var(--alarm)'] : t > 80 ? ['Throttled (hot)', 'var(--btc)'] : u[250] < 0.999 ? ['Underpowered', 'var(--btc)'] : ['Mining', 'var(--hash)'];
     h += `<span class="tag" style="color:${status[1]}">${status[0]}</span></div>
       <div class="row"><span>Temperature</span><b style="color:${t > 85 ? 'var(--alarm)' : t > 70 ? 'var(--btc)' : 'var(--ink)'}">${broken || off ? '—' : t.toFixed(0) + ' °C'}</b></div>
-      ${!broken && !off ? `<div class="row" style="font-size:12px"><span>Heat: ${u[16].toFixed(0)} °C air + box${u[48] > 0 ? ` + ${u[48]} packed neighbour${u[48] > 1 ? 's' : ''} (+${(u[48] * 4.5).toFixed(0)} °C)` : ''}</span><b style="color:${u[45] > 0.5 ? 'var(--hash)' : 'var(--muted)'}">${u[45] > 0.5 ? ic('snow') + ' −' + u[45].toFixed(0) + ' °C fans' : 'no fan air'}</b></div>` : ''}
+      ${!broken && !off && u[596] ? `<div class="row" style="font-size:12px"><span>${u[81] === 13 ? 'Own liquid loop' : 'In an immersion tank'}: the coolant sets its temperature, not the air. Heatwaves barely touch it, and it stays clean.</span><b style="color:var(--hash)">${ic('snow')} fluid</b></div>` : ''}
+      ${!broken && !off && !u[596] ? `<div class="row" style="font-size:12px"><span>Heat: ${u[16].toFixed(0)} °C air + box${u[48] > 0 ? ` + ${u[48]} packed neighbour${u[48] > 1 ? 's' : ''} (+${(u[48] * 4.5).toFixed(0)} °C)` : ''}</span><b style="color:${u[45] > 0.5 ? 'var(--hash)' : 'var(--muted)'}">${u[45] > 0.5 ? ic('snow') + ' −' + u[45].toFixed(0) + ' °C fans' : 'no fan air'}</b></div>` : ''}
       ${u[389] > 0 && !broken && !off ? `<div class="row" style="font-size:12px"><span>${ic('flame')} Exhaust piped to a greenhouse</span><b style="color:var(--hash)">−6 °C · sold</b></div>` : ''}
       <div class="row"><span>Health</span>${bar(hp, hp < 30 ? 'var(--alarm)' : hp < 60 ? 'var(--btc)' : 'var(--hash)')}<b>${hp.toFixed(0)}%${hp < 99 && !broken ? ` · ${Math.round(70 + 0.3 * hp)}% speed` : ''}</b></div>
       <div class="row"><span>Dust</span>${bar(u[289], u[289] > 60 ? 'var(--alarm)' : u[289] > 30 ? 'var(--btc)' : 'var(--muted)')}<b>${u[289].toFixed(0)}%${u[289] > 5 ? ` · +${(u[289] * 0.15).toFixed(0)} °C` : ''}</b></div>

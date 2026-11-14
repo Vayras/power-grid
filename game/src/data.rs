@@ -238,7 +238,11 @@ pub const T_NO_MARKET: f64 = 48.0;     // this site has no power market to buy s
 pub const T_GRID_FULL: f64 = 49.0;     // the utility won't give this site another connection
 
 pub const T_MILESTONE: f64 = 50.0;     // arg = index into MILESTONES
-pub const T_HEAT_COOL: f64 = 52.0;     // a heatwave your cooling rode out; arg = boxes kept under 80 °C
+pub const T_HEAT_COOL: f64 = 52.0;
+/// Liquid-cooled boxes (immersion or the Hydro model) sit at the coolant's temperature, set by the dry coolers:
+/// LIQ_BASE + LIQ_AIR x air temperature. Air doesn't touch them, so packing and dust don't heat them.
+pub const LIQ_BASE: f64 = 32.0;
+pub const LIQ_AIR: f64 = 0.4;     // a heatwave your cooling rode out; arg = boxes kept under 80 °C
 pub const T_AUTO_SOLD: f64 = 51.0;     // arg = BTC sold to cover bills
 
 /// Backers' milestones. Miners raise money against hashrate they have actually switched on, so each target

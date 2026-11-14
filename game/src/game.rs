@@ -504,7 +504,9 @@ impl Game {
         // dust settles every day; rain rinses some off; dust storms coat everything
         let add = match self.weather { W_DUST => 22.0, W_RAIN => -12.0, W_STORM => -18.0, _ => 1.6 };
         let add: f32 = if add > 0.0 && self.upgrades & UP_FILTERS != 0 { add * FILTER_DUST as f32 } else { add };
-        for b in self.blds.iter_mut() {
+        let liquid: Vec<bool> = (0..self.blds.len()).map(|x| self.is_liquid(x)).collect();
+        for (x, b) in self.blds.iter_mut().enumerate() {
+            if liquid[x] { b.dust = 0.0; continue; }
             if is_miner(b.kind) || b.kind == K_FAN || b.kind == K_IMMERSION {
                 let run = if b.off == 0 && b.broken == 0 { 1.0 } else { 0.3 };
                 b.dust = (b.dust + add * if add > 0.0 { run } else { 1.0 }).clamp(0.0, 100.0);
@@ -927,6 +929,19 @@ impl Game {
         if self.cool.len() != MAP * MAP { return 0.0; }
         fmin(self.cool[b.j as usize * MAP + b.i as usize] as f64, 30.0)
     }
+    /// In fluid: the Hydro model, or a box touching a running, powered immersion tank. These don't get dusty.
+    pub fn is_liquid(&self, x: usize) -> bool {
+        let b = self.blds[x];
+        if !is_miner(b.kind) { return false; }
+        if b.kind == K_MINER4 { return true; }
+        for dj in -1..=1i32 { for di in -1..=1i32 {
+            if di == 0 && dj == 0 { continue; }
+            if let Some(t) = self.tile(b.i as i32 + di, b.j as i32 + dj) {
+                if t.occ >= 0 { let o = &self.blds[t.occ as usize]; if o.kind == K_IMMERSION && o.off == 0 && self.net_frac(o) > 0.5 { return true; } }
+            }
+        } }
+        false
+    }
     /// Running miners packed right next to this one (each adds hot exhaust).
     /// Heat reuse: each running miner within reach of a greenhouse pipes its exhaust to the nearest one with room.
     fn link_heat(&mut self) {
@@ -998,6 +1013,11 @@ impl Game {
                 if is_miner(o.kind) && o.broken == 0 && o.off == 0 && self.net_frac(o) > 0.0 { packed += 1; } // hot exhaust from neighbours
             } }
             let running = self.blds[x].broken == 0 && self.blds[x].off == 0 && self.net_frac(&self.blds[x]) > 0.0;
+            // in fluid (an immersion tank next to it, or the Hydro model's own loop): the coolant's temperature, not the air's
+            if self.blds[x].kind == K_MINER4 || imm > 0 {
+                self.blds[x].temp = if running { (LIQ_BASE + LIQ_AIR * fmax(amb, 0.0) + self.blds[x].tune_heat() * 0.5) as f32 } else { amb as f32 };
+                continue;
+            }
             let gen_heat = if running { 40.0 + (self.blds[x].kind - K_MINER1) as f64 * 3.0 + self.blds[x].tune_heat() + self.blds[x].dead[P_FAN] as f64 * FAN_HEAT } else { 0.0 };
             let soak = packed as f64 * 4.5 + if running { self.blds[x].dust as f64 * 0.15 } else { 0.0 };
             let cool = fans + imm as f64 * 22.0;
@@ -1365,7 +1385,7 @@ impl Game {
                 self.heat_days = 3; self.heat_add = 9.0; self.update_temps();
                 // fans, immersion and greenhouses count: only boxes that would actually cook need chillers
                 let (hot, _) = self.hot_boxes();
-                if hot == 0 { let n = self.blds.iter().filter(|b| is_miner(b.kind) && b.broken == 0).count(); self.toast(T_HEAT_COOL, n as f64); }
+                if hot == 0 { /* nothing would cook: no warning, no choice */ }
                 else { self.pending = ev; self.ev_arg = self.chiller_cost(); }
             }
             EV_GAS_SPIKE => { self.gas_days = 3; self.toast(T_EVENT, ev as f64); }

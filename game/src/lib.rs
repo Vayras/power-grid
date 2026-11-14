@@ -505,7 +505,7 @@ unsafe fn fill_ui(gg: &Game, rr: &Renderer) {
             } else { 0.0 };
             let (sx, sy) = rr.to_screen(b.i as f32 + k.w as f32 * 0.5, b.j as f32 + k.d as f32 * 0.5);
             u[91] = sx as f64; u[92] = sy as f64; u[95] = k.w as f64; u[96] = k.d as f64; u[97] = k.th;
-            u[99] = b.dir as f64; u[289] = b.dust as f64; u[45] = gg.cooling_at(&b); u[48] = gg.packed_at(rr.sel as usize) as f64;
+            u[99] = b.dir as f64; u[289] = b.dust as f64; u[596] = gg.is_liquid(rr.sel as usize) as u8 as f64; u[45] = gg.cooling_at(&b); u[48] = gg.packed_at(rr.sel as usize) as f64;
             let si = rr.sel as usize; u[466] = if is_miner(b.kind) { b.reject() } else { 0.0 };
             u[387] = gg.gh_kw.get(si).copied().unwrap_or(0.0); u[388] = gg.piped.iter().filter(|p| **p == si as i32).count() as f64;
             u[389] = gg.piped.get(si).map_or(0.0, |p| (*p >= 0) as u8 as f64);
