@@ -73,16 +73,16 @@ pub static KINDS: [Kind; N_KINDS] = [
     mn(S::B_MINER1 + 1, 1_500.0, 1_410.0, 30.1),  // 10x Antminer S19 XP    (141 TH, 21.3 J/TH)
     mn(S::B_MINER1 + 2, 3_600.0, 2_000.0, 35.0),  // 10x Antminer S21       (200 TH, 17.5 J/TH)
     mn(S::B_MINER1 + 3, 10_000.0, 4_730.0, 56.8), // 10x Antminer S21 XP Hyd (473 TH, 12 J/TH)
-    aux(S::B_FAN, 500.0, 4.0),
-    aux(S::B_IMMERSION, 2_500.0, 6.0),
+    aux(S::B_FAN, 300.0, 4.0),
+    aux(S::B_IMMERSION, 1_500.0, 6.0),
     Kind { w: 1, d: 1, sprite: S::B_SHED, cost: 0.0, up2: 0.0, up3: 0.0, cap_kw: [0.0; 3], usd_mwh: 0.0, th: 0.0, kw: 0.0, coal_pad: false, pad: true, reach: 0, electric: false },
-    Kind { w: 1, d: 1, sprite: S::B_POLE, cost: 800.0, up2: 0.0, up3: 0.0, cap_kw: [0.0; 3], usd_mwh: 0.0, th: 0.0, kw: 0.0, coal_pad: false, pad: false, reach: 4, electric: true },
+    Kind { w: 1, d: 1, sprite: S::B_POLE, cost: 250.0, up2: 0.0, up3: 0.0, cap_kw: [0.0; 3], usd_mwh: 0.0, th: 0.0, kw: 0.0, coal_pad: false, pad: false, reach: 4, electric: true },
     // wall: Lv1 wooden palisade, Lv2 stone, Lv3 steel + razor wire. Raiders and air stop at it.
-    Kind { w: 1, d: 1, sprite: S::B_WALL, cost: 300.0, up2: 900.0, up3: 2_500.0, cap_kw: [0.0; 3], usd_mwh: 0.0, th: 0.0, kw: 0.0, coal_pad: false, pad: false, reach: 0, electric: false },
+    Kind { w: 1, d: 1, sprite: S::B_WALL, cost: 120.0, up2: 400.0, up3: 1_000.0, cap_kw: [0.0; 3], usd_mwh: 0.0, th: 0.0, kw: 0.0, coal_pad: false, pad: false, reach: 0, electric: false },
     // "No trespassing" sign: each one (up to 4) makes raids less likely
-    Kind { w: 1, d: 1, sprite: S::B_SIGN, cost: 250.0, up2: 0.0, up3: 0.0, cap_kw: [0.0; 3], usd_mwh: 0.0, th: 0.0, kw: 0.0, coal_pad: false, pad: false, reach: 0, electric: false },
+    Kind { w: 1, d: 1, sprite: S::B_SIGN, cost: 100.0, up2: 0.0, up3: 0.0, cap_kw: [0.0; 3], usd_mwh: 0.0, th: 0.0, kw: 0.0, coal_pad: false, pad: false, reach: 0, electric: false },
     // greenhouse next door: buys the waste heat of miners within HEAT_REACH tiles
-    Kind { w: 2, d: 2, sprite: S::B_GREENHOUSE, cost: 6_000.0, up2: 0.0, up3: 0.0, cap_kw: [0.0; 3], usd_mwh: 0.0, th: 0.0, kw: 0.0, coal_pad: false, pad: false, reach: 0, electric: false },
+    Kind { w: 2, d: 2, sprite: S::B_GREENHOUSE, cost: 4_000.0, up2: 0.0, up3: 0.0, cap_kw: [0.0; 3], usd_mwh: 0.0, th: 0.0, kw: 0.0, coal_pad: false, pad: false, reach: 0, electric: false },
     // deep geothermal: wells 15 km down to superhot rock (game)
     pw(2, 2, S::B_DEEPGEO, 600_000.0, 800_000.0, 1_000_000.0, [80_000.0, 120_000.0, 160_000.0], 4.0, false),
     // orbital solar: sunlight collected in orbit and beamed to a ground station, day and night (game)
@@ -146,8 +146,8 @@ pub const REAL_PRICE: [f64; 4] = [3_500.0, 9_000.0, 22_000.0, 60_000.0];
 
 /// Clearing land (tool id used by the UI, not a building)
 pub const TOOL_CLEAR: i32 = 100;
-pub const CLEAR_TREE: f64 = 150.0;
-pub const CLEAR_RUBBLE: f64 = 250.0;
+pub const CLEAR_TREE: f64 = 80.0;
+pub const CLEAR_RUBBLE: f64 = 120.0;
 
 pub fn is_power(k: u8) -> bool { k <= K_CORE || k == K_DEEPGEO || k == K_ORBITAL }
 pub fn is_miner(k: u8) -> bool { (K_MINER1..=K_MINER4).contains(&k) }

@@ -143,7 +143,8 @@ Upload `web/` to any static host. Make sure `.wasm` is served as `application/wa
 - **Upkeep (Site tab):** cleaners ($10/day) blow out the 15 dustiest boxes and fan walls a day; mechanics ($35/day)
   service the 6 most-worn running miners a day (+6% health, no bill). One-off site upgrades: intake filters ($3,000,
   dust settles 60% slower) and health monitoring ($5,000, 30% less heat wear). A manual service costs 15% of a new
-  box scaled by wear (a dead box: 22%).
+  box scaled by wear (a dead box: 22%). One Service visit does it all: health, dust and failed parts, for half a
+  call-out (none with a technician on staff) plus parts at list price.
 - **Pools (tap ₿):** a big FPPS pool nearby (2% fee, 25 ms), a budget FPPS pool overseas (1%, 240 ms) or a small
   PPLNS pool (0.5%, 60 ms, 2% of the network, pays only when it finds a block). Stale shares grow with latency;
   rejected shares with overclocking, heat over 80 °C and worn boxes.

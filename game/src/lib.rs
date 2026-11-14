@@ -353,6 +353,8 @@ pub extern "C" fn click(sx: i32, sy: i32) -> i32 {
 #[no_mangle] pub extern "C" fn select_none() { r().sel = -1; }
 #[no_mangle] pub extern "C" fn upgrade_sel() { let s = r().sel; if s >= 0 { g().upgrade(s as usize); } }
 #[no_mangle] pub extern "C" fn repair_sel() { let s = r().sel; if s >= 0 { g().repair(s as usize); } }
+/// The one-stop service: health, dust and failed parts in a single visit.
+#[no_mangle] pub extern "C" fn service_sel() { let s = r().sel; if s >= 0 { g().service(s as usize); } }
 #[no_mangle] pub extern "C" fn sell_sel() { let rr = r(); if rr.sel >= 0 { g().sell(rr.sel as usize); rr.sel = -1; } }
 #[no_mangle] pub extern "C" fn sell_btc(pct: u32) { g().sell_btc(pct.min(100) as f64 / 100.0); }
 #[no_mangle] pub extern "C" fn choose(c: u32) { g().choose(c); }
@@ -505,7 +507,7 @@ unsafe fn fill_ui(gg: &Game, rr: &Renderer) {
             let si = rr.sel as usize; u[466] = if is_miner(b.kind) { b.reject() } else { 0.0 };
             u[387] = gg.gh_kw.get(si).copied().unwrap_or(0.0); u[388] = gg.piped.iter().filter(|p| **p == si as i32).count() as f64;
             u[389] = gg.piped.get(si).map_or(0.0, |p| (*p >= 0) as u8 as f64);
-            u[234] = b.health as f64; u[235] = gg.sell_value(rr.sel as usize); u[236] = gg.repair_cost(rr.sel as usize);
+            u[234] = b.health as f64; u[235] = gg.sell_value(rr.sel as usize); u[236] = gg.service_cost(rr.sel as usize);
             u[89] = u[235];
             u[237] = if b.net == u16::MAX { -1.0 } else { b.net as f64 };
             if let Some(nt) = gg.nets.get(b.net as usize) {

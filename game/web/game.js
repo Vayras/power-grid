@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-15.38';
+const BUILD = 'build 2026-11-15.39';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -43,7 +43,7 @@ const parentsOf = (k) => (TREE[k] || []).flatMap((p) => (p === 6 && noRiver() ? 
 const childrenOf = (k) => Object.keys(TREE).map(Number).filter((c) => TREE[c].includes(k)).flatMap((c) => (c === 6 && noRiver() ? childrenOf(6) : [c]));
 const nameList = (ks) => ks.map((k) => KINDS[k].name.toLowerCase()).join(' or ');
 const isPow = (k) => k <= 9 || k === 21 || k === 22;
-const CLEAR_ITEM = { name: 'Clear land', tab: 'site', spr: 'TREE_0', desc: 'Drag to remove trees ($150) and rubble ($250)' };
+const CLEAR_ITEM = { name: 'Clear land', tab: 'site', spr: 'TREE_0', desc: 'Drag to remove trees ($80) and rubble ($120)' };
 const kindOf = (k) => (k === CLEAR ? CLEAR_ITEM : KINDS[k]);
 const isMiner = (k) => k >= 10 && k <= 13;
 const PAINT = (k) => k === 18 || k === CLEAR;
@@ -527,12 +527,12 @@ function renderDock() {
     if (k.tab !== tab) return;
     const unlocked = idx === CLEAR || u[430 + idx] > 0;
     const b = el('button', { class: 'item' + (unlocked ? '' : ' locked') + (tool === idx ? ' on' : ''), 'aria-pressed': tool === idx });
-    const cost = idx === CLEAR ? 150 : u[400 + idx];
+    const cost = idx === CLEAR ? 80 : u[400 + idx];
     let sub = isPow(idx) ? power(CAP[idx][0]) + ' · ' + (idx === 0 ? `$${u[305]}/MWh ${u[512] === 5 && !u[318] ? 'flare gas' : 'contract'}. ${u[512] === 0 || u[318] ? 'Brownouts and curtailment calls.' : k.desc}` : k.desc) : k.desc;
     if (idx === 20) sub = k.desc + `<br><span class="dim">Heat sells for $${u[390].toFixed(1)}/MWh today${u[394] ? ` · yours: ${money(u[392])}/day` : ''}</span>`;
     if (isMiner(idx)) { const ec = econ(idx, u); sub = k.desc + `<br><b style="color:${ec.profit > 0 ? 'var(--cash)' : 'var(--alarm)'}">${ec.profit > 0 ? '+' : '−'}${money(Math.abs(ec.profit))}/day</b> · ${ec.profit > 0 ? 'pays back in ' + days(ec.payback) : 'loses money at $' + Math.round(ec.pp) + '/MWh'}<br><span class="dim">${u[330 + idx - 10] > 0 ? `Used ${money(u[326 + idx - 10])} · ${u[330 + idx - 10]} for sale` : 'No used ones for sale'} · real ≈ ${money(u[308 + idx - 10])}</span>`; }
     b.innerHTML = `<span class="thumb">${innerWidth <= 720 ? thumb(k.spr, 44) : thumb(k.spr, 64, 68)}</span><span class="n">${k.name}</span><span class="s">${sub}</span>` +
-      (unlocked ? `<span class="c">${idx === CLEAR ? 'from $150' : money(cost)}</span>` : `<span class="lockt">${ic('lock')} ${isPow(idx) ? 'Max out ' + nameList(parentsOf(idx)) : UNLOCK_HINT[idx] || ''}</span>`);
+      (unlocked ? `<span class="c">${idx === CLEAR ? 'from $80' : money(cost)}</span>` : `<span class="lockt">${ic('lock')} ${isPow(idx) ? 'Max out ' + nameList(parentsOf(idx)) : UNLOCK_HINT[idx] || ''}</span>`);
     b.onclick = () => { if (!unlocked) { sfx('bad'); toast('Locked', isPow(idx) ? `Upgrade a ${nameList(parentsOf(idx))} to level 3 first.` : UNLOCK_HINT[idx] + '.', 'var(--muted)'); return; } setTool(tool === idx ? -1 : idx); };
     box.appendChild(b);
   });
@@ -556,7 +556,7 @@ function showPlacebar() {
   E.sync_ui(); const u = UI(); $('#placebar').hidden = false;
   const touch = matchMedia('(pointer: coarse)').matches;
   let t = `${kindOf(tool).name}`;
-  if (PAINT(tool)) t += ` · <span class="dim">${tool === 18 ? 'drag to lay walls, $300 a tile' : 'drag over trees and rubble'}</span>`;
+  if (PAINT(tool)) t += ` · <span class="dim">${tool === 18 ? 'drag to lay walls, $120 a tile' : 'drag over trees and rubble'}</span>`;
   else t += ` · <b>${money(u[38] || (isMiner(tool) ? u[(u[338] > 0 ? 326 : 322) + tool - 10] : u[400 + tool]))}</b>`;
   if (isMiner(tool) && !touch) t += ` <span class="dim">· click, or drag out a row</span>`;
   { const list = isMiner(tool) ? u[(u[338] > 0 ? 326 : 322) + tool - 10] : u[400 + tool]; if (!PAINT(tool) && u[38] > list + 1) t += ` <span class="dim">incl. ${money(u[38] - list)} to clear the land</span>`; }
@@ -616,7 +616,10 @@ function renderInspector(force) {
         <div class="row" style="font-size:12px"><span>New one pays back in</span><b>${days(ec.payback)}</b></div>`; })()}
       ${netRows(u)}
       ${u[249] > 0 ? `<div class="row warn"><span>${ic('shield')} Outside your fence. Raiders can steal it.</span></div>` : ''}
-      <div class="acts">${broken ? `<button class="btn btn-p" data-a="repair">Repair ${money(u[236])}</button>` : sw + (hp < 99 ? `<button class="btn" data-a="repair">Service ${money(u[236])}</button>` : '') + (u[289] >= 5 ? `<button class="btn" data-a="clean">${ic('broom')}Clean $120</button>` : '') + (u[509] > 0 ? `<button class="btn btn-p" data-a="fix">${ic('wrench')}Fix parts ${money(u[509])}</button>` : '')}${sell('Sell to a broker')}</div>`;
+      ${(() => { // one service visit covers everything wrong with the box; say what it includes
+        const jobs = broken ? ['rebuilt from dead'] : [hp < 99.5 ? `health ${hp.toFixed(0)}% → 100%` : '', u[289] >= 5 ? 'clean' : '', u[509] > 0 ? `${u[506] + u[507] + u[508]} failed part${u[506] + u[507] + u[508] === 1 ? '' : 's'}` : ''].filter(Boolean);
+        return u[236] > 0 ? `<div class="row" style="font-size:12px"><span>${ic('wrench')} Service: ${jobs.join(' · ')}</span><b>${money(u[236])}</b></div>` : ''; })()}
+      <div class="acts">${u[236] > 0 ? `<button class="btn btn-p" data-a="service">${ic('wrench')}${broken ? 'Rebuild' : 'Service'} ${money(u[236])}</button>` : ''}${broken ? '' : sw}${sell('Sell to a broker')}</div>`;
   } else if (isPow(kind)) {
     const next = lvl < 3 && kind !== 9 ? CAP[kind][lvl] : 0;
     h += `<span class="tag">Level ${lvl}/3</span></div>
@@ -674,6 +677,7 @@ function renderInspector(force) {
     if (a === 'sell') { E.sell_sel(); sfx('cash'); closeInspector(); return; }
     if (a === 'contract') { openContract(); return; }
     if (a === 'fix') { E.fix_sel(); sfx('repair'); }
+    if (a === 'service') { E.service_sel(); sfx('repair'); }
     if (a === 'crew') { openCrew(); return; }
     if (a === 'tune') { if (E.tune_sel(+b.dataset.t)) { sfx(+b.dataset.t < u[342] ? 'power_off' : 'power_on'); tip('firmware'); } }
     if (a === 'tunesame') { const n = E.tune_same(u[342]); if (n) { sfx('upgrade'); toast('Firmware', `${n} more ${SHORT[u[81]] || 'boxes'} set to ${TUNE.name[u[342] + 2]}.`, 'var(--hash)', 'firmware', 'chip'); } }

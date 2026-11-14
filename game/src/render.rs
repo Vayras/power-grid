@@ -310,7 +310,7 @@ impl Renderer {
                 self.light(cx, cy - self.k(14), self.k(14), rgba(255, 214, 120), la * 50 >> 8);
                 self.dot(cx, cy - self.k(18), rgba(255, 230, 160), la);
             } else if b.kind == K_POLE && (b.i + b.j) % 3 == 0 {
-                self.light(cx, cy - self.k(26), self.k(9), rgba(255, 220, 150), la * 40 >> 8);
+                self.light(cx, cy - self.k(21), self.k(9), rgba(255, 220, 150), la * 40 >> 8);
             }
         }
     }
@@ -787,7 +787,7 @@ impl Renderer {
     fn anchor_top(&self, g: &Game, idx: usize) -> (i32, i32) {
         let b = g.blds[idx]; let k = KINDS[b.kind as usize];
         let (x, y) = self.to_screen(b.i as f32 + k.w as f32 * 0.5, b.j as f32 + k.d as f32 * 0.5);
-        if b.kind == K_POLE { (x, y - self.k(29)) } else { (x, y - self.k(12)) }
+        if b.kind == K_POLE { (x, y - self.k(23)) } else { (x, y - self.k(12)) }
     }
 
     fn sprite_for(&self, kind: u8, dir: u8) -> usize {

@@ -105,69 +105,69 @@ pub const G_SITE_VAR: usize = 4; pub const G_SITE_ACC: usize = 3; pub const G_SI
 pub const G_SITE_N: usize = 9;
 pub const G_SITE_ACC_SHARE: [f32; 6] = [0.0, 0.16, 0.12, 0.14, 0.3, 0.16];
 pub static SPRITES: [Spr; 94] = [
-    Spr { x: 1194, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 0 G_GRASS
-    Spr { x: 1324, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 1 G_ROUGH
-    Spr { x: 1560, y: 1030, w: 128, h: 76, ax: -64, ay: 4, e0: 0, ne: 0, top: 4 }, // 2 G_WATER
-    Spr { x: 1454, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 3 G_CONCRETE
-    Spr { x: 848, y: 770, w: 128, h: 86, ax: -64, ay: -6, e0: 0, ne: 0, top: -6 }, // 4 G_COAL
-    Spr { x: 1584, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 5 G_S1_0
-    Spr { x: 1714, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 6 G_S1_1
-    Spr { x: 1844, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 7 G_S1_2
-    Spr { x: 0, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 8 G_S1_3
-    Spr { x: 130, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 9 G_S1_4
-    Spr { x: 260, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 10 G_S1_5
-    Spr { x: 390, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 11 G_S1_6
-    Spr { x: 520, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 12 G_S1_7
-    Spr { x: 650, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 13 G_S1_8
-    Spr { x: 780, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 14 G_S2_0
-    Spr { x: 910, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 15 G_S2_1
-    Spr { x: 1040, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 16 G_S2_2
-    Spr { x: 1170, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 17 G_S2_3
-    Spr { x: 1300, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 18 G_S2_4
-    Spr { x: 1430, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 19 G_S2_5
-    Spr { x: 1560, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 20 G_S2_6
-    Spr { x: 1690, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 21 G_S2_7
-    Spr { x: 1820, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 22 G_S2_8
-    Spr { x: 0, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 23 G_S3_0
-    Spr { x: 130, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 24 G_S3_1
-    Spr { x: 260, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 25 G_S3_2
-    Spr { x: 390, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 26 G_S3_3
-    Spr { x: 520, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 27 G_S3_4
-    Spr { x: 650, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 28 G_S3_5
-    Spr { x: 780, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 29 G_S3_6
-    Spr { x: 910, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 30 G_S3_7
-    Spr { x: 1040, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 31 G_S3_8
-    Spr { x: 1170, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 32 G_S4_0
-    Spr { x: 1300, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 33 G_S4_1
-    Spr { x: 1430, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 34 G_S4_2
-    Spr { x: 1560, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 35 G_S4_3
-    Spr { x: 1690, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 36 G_S4_4
-    Spr { x: 1820, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 37 G_S4_5
-    Spr { x: 0, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 38 G_S4_6
-    Spr { x: 130, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 39 G_S4_7
-    Spr { x: 260, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 40 G_S4_8
-    Spr { x: 390, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 41 G_S5_0
-    Spr { x: 520, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 42 G_S5_1
-    Spr { x: 650, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 43 G_S5_2
-    Spr { x: 780, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 44 G_S5_3
-    Spr { x: 910, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 45 G_S5_4
-    Spr { x: 1040, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 46 G_S5_5
-    Spr { x: 1170, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 47 G_S5_6
-    Spr { x: 1300, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 48 G_S5_7
-    Spr { x: 1430, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 49 G_S5_8
-    Spr { x: 1302, y: 638, w: 102, h: 94, ax: -34, ay: -82, e0: 0, ne: 0, top: -80 }, // 50 TREE_0
+    Spr { x: 1054, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 0 G_GRASS
+    Spr { x: 1184, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 1 G_ROUGH
+    Spr { x: 1430, y: 1030, w: 128, h: 76, ax: -64, ay: 4, e0: 0, ne: 0, top: 4 }, // 2 G_WATER
+    Spr { x: 1314, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 3 G_CONCRETE
+    Spr { x: 708, y: 770, w: 128, h: 86, ax: -64, ay: -6, e0: 0, ne: 0, top: -6 }, // 4 G_COAL
+    Spr { x: 1444, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 5 G_S1_0
+    Spr { x: 1574, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 6 G_S1_1
+    Spr { x: 1704, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 7 G_S1_2
+    Spr { x: 1834, y: 770, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 8 G_S1_3
+    Spr { x: 0, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 9 G_S1_4
+    Spr { x: 130, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 10 G_S1_5
+    Spr { x: 260, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 11 G_S1_6
+    Spr { x: 390, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 12 G_S1_7
+    Spr { x: 520, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 13 G_S1_8
+    Spr { x: 650, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 14 G_S2_0
+    Spr { x: 780, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 15 G_S2_1
+    Spr { x: 910, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 16 G_S2_2
+    Spr { x: 1040, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 17 G_S2_3
+    Spr { x: 1170, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 18 G_S2_4
+    Spr { x: 1300, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 19 G_S2_5
+    Spr { x: 1430, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 20 G_S2_6
+    Spr { x: 1560, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 21 G_S2_7
+    Spr { x: 1690, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 22 G_S2_8
+    Spr { x: 1820, y: 866, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 23 G_S3_0
+    Spr { x: 0, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 24 G_S3_1
+    Spr { x: 130, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 25 G_S3_2
+    Spr { x: 260, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 26 G_S3_3
+    Spr { x: 390, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 27 G_S3_4
+    Spr { x: 520, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 28 G_S3_5
+    Spr { x: 650, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 29 G_S3_6
+    Spr { x: 780, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 30 G_S3_7
+    Spr { x: 910, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 31 G_S3_8
+    Spr { x: 1040, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 32 G_S4_0
+    Spr { x: 1170, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 33 G_S4_1
+    Spr { x: 1300, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 34 G_S4_2
+    Spr { x: 1430, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 35 G_S4_3
+    Spr { x: 1560, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 36 G_S4_4
+    Spr { x: 1690, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 37 G_S4_5
+    Spr { x: 1820, y: 948, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 38 G_S4_6
+    Spr { x: 0, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 39 G_S4_7
+    Spr { x: 130, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 40 G_S4_8
+    Spr { x: 260, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 41 G_S5_0
+    Spr { x: 390, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 42 G_S5_1
+    Spr { x: 520, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 43 G_S5_2
+    Spr { x: 650, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 44 G_S5_3
+    Spr { x: 780, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 45 G_S5_4
+    Spr { x: 910, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 46 G_S5_5
+    Spr { x: 1040, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 47 G_S5_6
+    Spr { x: 1170, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 48 G_S5_7
+    Spr { x: 1300, y: 1030, w: 128, h: 80, ax: -64, ay: 0, e0: 0, ne: 0, top: 0 }, // 49 G_S5_8
+    Spr { x: 926, y: 638, w: 102, h: 94, ax: -34, ay: -82, e0: 0, ne: 0, top: -80 }, // 50 TREE_0
     Spr { x: 302, y: 638, w: 102, h: 118, ax: -28, ay: -106, e0: 0, ne: 0, top: -104 }, // 51 TREE_1
-    Spr { x: 978, y: 770, w: 108, h: 86, ax: -40, ay: -74, e0: 0, ne: 0, top: -74 }, // 52 TREE_2
-    Spr { x: 1762, y: 1030, w: 90, h: 64, ax: -46, ay: -40, e0: 0, ne: 0, top: -38 }, // 53 TREE_3
+    Spr { x: 838, y: 770, w: 108, h: 86, ax: -40, ay: -74, e0: 0, ne: 0, top: -74 }, // 52 TREE_2
+    Spr { x: 1636, y: 1030, w: 90, h: 64, ax: -46, ay: -40, e0: 0, ne: 0, top: -38 }, // 53 TREE_3
     Spr { x: 716, y: 638, w: 88, h: 102, ax: -24, ay: -92, e0: 0, ne: 0, top: -92 }, // 54 TREE_4
     Spr { x: 202, y: 638, w: 98, h: 122, ax: -38, ay: -100, e0: 0, ne: 0, top: -100 }, // 55 TREE_5
     Spr { x: 0, y: 638, w: 106, h: 130, ax: -40, ay: -110, e0: 0, ne: 0, top: -110 }, // 56 TREE_6
-    Spr { x: 1854, y: 1030, w: 76, h: 46, ax: -38, ay: -28, e0: 0, ne: 0, top: -26 }, // 57 TREE_7
-    Spr { x: 902, y: 638, w: 118, h: 98, ax: -24, ay: -86, e0: 0, ne: 0, top: -86 }, // 58 TREE_8
+    Spr { x: 1790, y: 1030, w: 76, h: 46, ax: -38, ay: -28, e0: 0, ne: 0, top: -26 }, // 57 TREE_7
+    Spr { x: 806, y: 638, w: 118, h: 98, ax: -24, ay: -86, e0: 0, ne: 0, top: -86 }, // 58 TREE_8
     Spr { x: 108, y: 638, w: 92, h: 126, ax: -26, ay: -112, e0: 0, ne: 0, top: -110 }, // 59 TREE_9
-    Spr { x: 1088, y: 770, w: 104, h: 86, ax: -34, ay: -74, e0: 0, ne: 0, top: -72 }, // 60 TREE_10
+    Spr { x: 948, y: 770, w: 104, h: 86, ax: -34, ay: -74, e0: 0, ne: 0, top: -72 }, // 60 TREE_10
     Spr { x: 824, y: 404, w: 204, h: 176, ax: -80, ay: -106, e0: 0, ne: 0, top: -104 }, // 61 B_GRID
-    Spr { x: 1406, y: 638, w: 140, h: 94, ax: -70, ay: -26, e0: 0, ne: 1, top: -24 }, // 62 B_DIESEL
+    Spr { x: 1030, y: 638, w: 140, h: 94, ax: -70, ay: -26, e0: 0, ne: 1, top: -24 }, // 62 B_DIESEL
     Spr { x: 1520, y: 0, w: 334, h: 286, ax: -134, ay: -154, e0: 1, ne: 1, top: -154 }, // 63 B_GAS
     Spr { x: 678, y: 0, w: 366, h: 374, ax: -134, ay: -210, e0: 2, ne: 3, top: -210 }, // 64 B_COAL
     Spr { x: 1588, y: 404, w: 266, h: 150, ax: -134, ay: -18, e0: 5, ne: 0, top: -18 }, // 65 B_SOLAR
@@ -178,26 +178,26 @@ pub static SPRITES: [Spr; 94] = [
     Spr { x: 0, y: 404, w: 268, h: 232, ax: -134, ay: -100, e0: 5, ne: 1, top: -100 }, // 70 B_FISSION
     Spr { x: 1312, y: 404, w: 274, h: 164, ax: -134, ay: -32, e0: 6, ne: 0, top: -30 }, // 71 B_FUSION
     Spr { x: 0, y: 0, w: 296, h: 402, ax: -134, ay: -270, e0: 6, ne: 0, top: -270 }, // 72 B_CORE
-    Spr { x: 1548, y: 638, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 73 B_MINER1
-    Spr { x: 1688, y: 638, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 74 B_MINER2
-    Spr { x: 1828, y: 638, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 75 B_MINER3
-    Spr { x: 0, y: 770, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 76 B_MINER4
-    Spr { x: 140, y: 770, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 77 B_MINERG1
-    Spr { x: 280, y: 770, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 78 B_MINERG2
-    Spr { x: 420, y: 770, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 79 B_MINERG3
-    Spr { x: 560, y: 770, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 80 B_MINERG4
-    Spr { x: 1022, y: 638, w: 138, h: 98, ax: -70, ay: -30, e0: 6, ne: 0, top: -30 }, // 81 B_FAN
-    Spr { x: 1162, y: 638, w: 138, h: 98, ax: -70, ay: -30, e0: 6, ne: 0, top: -30 }, // 82 B_FAN2
-    Spr { x: 1690, y: 1030, w: 70, h: 76, ax: -22, ay: -34, e0: 6, ne: 0, top: -32 }, // 83 B_POLE
+    Spr { x: 1172, y: 638, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 73 B_MINER1
+    Spr { x: 1312, y: 638, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 74 B_MINER2
+    Spr { x: 1452, y: 638, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 75 B_MINER3
+    Spr { x: 1592, y: 638, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 76 B_MINER4
+    Spr { x: 1732, y: 638, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 77 B_MINERG1
+    Spr { x: 1872, y: 638, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 78 B_MINERG2
+    Spr { x: 0, y: 770, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 79 B_MINERG3
+    Spr { x: 140, y: 770, w: 138, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -24 }, // 80 B_MINERG4
+    Spr { x: 428, y: 770, w: 138, h: 88, ax: -70, ay: -20, e0: 6, ne: 0, top: -18 }, // 81 B_FAN
+    Spr { x: 568, y: 770, w: 138, h: 88, ax: -70, ay: -20, e0: 6, ne: 0, top: -18 }, // 82 B_FAN2
+    Spr { x: 1728, y: 1030, w: 60, h: 60, ax: -22, ay: -18, e0: 6, ne: 0, top: -18 }, // 83 B_POLE
     Spr { x: 1856, y: 404, w: 180, h: 146, ax: -42, ay: -60, e0: 6, ne: 0, top: -58 }, // 84 B_WALL
-    Spr { x: 806, y: 638, w: 94, h: 102, ax: -30, ay: -54, e0: 6, ne: 0, top: -52 }, // 85 B_SIGN
-    Spr { x: 700, y: 770, w: 146, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -26 }, // 86 B_IMMERSION
+    Spr { x: 1560, y: 1030, w: 74, h: 72, ax: -28, ay: -26, e0: 6, ne: 0, top: -24 }, // 85 B_SIGN
+    Spr { x: 280, y: 770, w: 146, h: 94, ax: -70, ay: -26, e0: 6, ne: 0, top: -26 }, // 86 B_IMMERSION
     Spr { x: 570, y: 638, w: 144, h: 112, ax: -70, ay: -44, e0: 6, ne: 0, top: -44 }, // 87 B_SHED
     Spr { x: 1030, y: 404, w: 280, h: 174, ax: -138, ay: -42, e0: 6, ne: 0, top: -40 }, // 88 B_GREENHOUSE
     Spr { x: 1046, y: 0, w: 274, h: 364, ax: -134, ay: -232, e0: 6, ne: 2, top: -230 }, // 89 B_DEEPGEO
     Spr { x: 556, y: 404, w: 266, h: 178, ax: -134, ay: -46, e0: 8, ne: 0, top: -44 }, // 90 B_ORBITAL
-    Spr { x: 1932, y: 1030, w: 42, h: 40, ax: -22, ay: -30, e0: 8, ne: 0, top: -30 }, // 91 WORKER0
-    Spr { x: 1976, y: 1030, w: 42, h: 40, ax: -22, ay: -30, e0: 8, ne: 0, top: -30 }, // 92 WORKER1
+    Spr { x: 1868, y: 1030, w: 42, h: 40, ax: -22, ay: -30, e0: 8, ne: 0, top: -30 }, // 91 WORKER0
+    Spr { x: 1912, y: 1030, w: 42, h: 40, ax: -22, ay: -30, e0: 8, ne: 0, top: -30 }, // 92 WORKER1
     Spr { x: 406, y: 638, w: 162, h: 116, ax: -52, ay: -44, e0: 8, ne: 0, top: -42 }, // 93 TRUCK
 ];
 pub static EMIT: [(i16, i16); 8] = [(30, -26), (64, -152), (64, -96), (116, -66), (-32, -210), (0, -88), (60, -20), (76, -4)];

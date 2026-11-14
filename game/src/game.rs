@@ -782,6 +782,32 @@ impl Game {
         if failed > 0 && left > 0 && (self.techs == 0 || swapped == 0) && left >= 3 { self.toast(T_PARTS_FAILED, failed as f64); }
         if failed > 0 || swapped > 0 { self.update_temps(); self.dispatch(false); }
     }
+    /// One service visit fixes everything wrong with a box: health back to 100%, filters blown out, failed parts
+    /// swapped (from the shelf first, the rest bought at list price). A dead box comes back rebuilt. Half a call-out is
+    /// charged once, and none when there's a technician on staff to do it in-house.
+    pub fn service_cost(&self, idx: usize) -> f64 {
+        let b = match self.blds.get(idx) { Some(b) if is_miner(b.kind) => b, _ => return 0.0 };
+        if b.broken != 0 { return self.repair_cost(idx); }
+        let mut c = if b.health < 99.5 { self.repair_cost(idx) } else { 0.0 };
+        if b.dust >= 5.0 { c += CLEAN_COST; }
+        if b.parts_out() > 0 {
+            // one planned visit: half a call-out (none with a technician on staff), parts at list price
+            if self.techs == 0 { c += CALLOUT_USD * 0.5 * self.st().callout; }
+            for p in 0..3 { let from_shelf = (b.dead[p] as u32).min(self.spares[p]); c += (b.dead[p] as u32 - from_shelf) as f64 * PART_USD[p]; }
+        }
+        c
+    }
+    pub fn service(&mut self, idx: usize) {
+        let c = self.service_cost(idx); if c <= 0.0 { return; }
+        if self.cash < c { self.toast(T_NO_CASH, 0.0); return; }
+        self.cash -= c;
+        if self.blds[idx].broken == 0 { for p in 0..3 { let from_shelf = (self.blds[idx].dead[p] as u32).min(self.spares[p]); self.spares[p] -= from_shelf; } }
+        let b = &mut self.blds[idx];
+        b.dead = [0; 3]; b.broken = 0; b.health = 100.0; b.fire = 0; b.dust = 0.0;
+        let (i, j) = (b.i as i32, b.j as i32); self.fx.push((4, i, j, 1, 1));
+        self.toast(T_REPAIRED, 0.0);
+        self.update_temps(); self.dispatch(false);
+    }
     /// What fixing one box's failed parts costs now: a contractor's call-out plus parts (from the shelf if you have them).
     pub fn fix_cost(&self, idx: usize) -> f64 {
         let b = match self.blds.get(idx) { Some(b) if is_miner(b.kind) && b.parts_out() > 0 => b, _ => return 0.0 };
