@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-15.37';
+const BUILD = 'build 2026-11-15.38';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -131,7 +131,7 @@ try {
   return;
 }
 mem = () => E.memory.buffer;
-const UI = () => new Float64Array(mem(), E.ui_ptr(), 570);
+const UI = () => new Float64Array(mem(), E.ui_ptr(), 600);
 window.PG = { get E() { return E; }, UI, finale: () => showFinale(UI()) };
 
 // ------------------------------------------------------------------ canvas + loop
@@ -507,9 +507,10 @@ function renderDock() {
   }
   if (tab === 'site') {
     const c = el('div', { class: 'item owned' }); const dead = u[488] + u[489] + u[490];
-    c.innerHTML = `<span class="n">Crew & spares</span><span class="s">${u[480]} technician${u[480] === 1 ? '' : 's'} · ${u[481]} guard${u[481] === 1 ? '' : 's'}${u[497] ? ` · ${money(u[497])}/day` : ''}</span>` +
+    const crew = [[u[480], 'technician'], [u[571], 'mechanic'], [u[570], 'cleaner'], [u[481], 'guard']].filter(([n]) => n > 0).map(([n, w]) => `${n} ${w}${n === 1 ? '' : 's'}`).join(' · ') || 'No crew yet';
+    c.innerHTML = `<span class="n">Crew & upkeep</span><span class="s">${crew}${u[497] ? ` · ${money(u[497])}/day` : ''}</span><span class="s">Fleet health ${Math.round(u[577])}%${u[578] ? ` · ${u[578]} worn` : ''}</span>` +
       `<span class="s">Shelf: ${u[482]} boards, ${u[483]} PSUs, ${u[484]} fans</span>` + (dead ? `<span class="s" style="color:var(--btc)">${dead} failed parts in your boxes</span>` : '') +
-      `<button class="btn btn-p mini" data-crew>Crew & spares</button>`;
+      `<button class="btn btn-p mini" data-crew>Crew & upkeep</button>`;
     c.querySelector('[data-crew]').onclick = (e) => { e.stopPropagation(); openCrew(); };
     box.appendChild(c);
   }
@@ -1372,17 +1373,25 @@ function partsRow(kind, u) {
 function openCrew() {
   E.sync_ui(); const u = UI(); const dead = u[488] + u[489] + u[490];
   const step = (a, v, max) => `<span class="stepper"><button class="btn mini" data-st="${a}" data-d="-1" ${v <= 0 ? 'disabled' : ''} aria-label="Fewer">−</button><b class="num">${v}</b><button class="btn mini" data-st="${a}" data-d="1" ${v >= max ? 'disabled' : ''} aria-label="More">+</button></span>`;
-  openModal(`<div class="mh"><div><h2>Crew & spares</h2><span class="dim">${fmtDate(runDate(u))}</span></div><button class="ib" data-x aria-label="Close">${ic('x')}</button></div>
+  openModal(`<div class="mh"><div><h2>Crew & upkeep</h2><span class="dim">${fmtDate(runDate(u))}</span></div><button class="ib" data-x aria-label="Close">${ic('x')}</button></div>
     <p class="lead">Machines fail a part at a time: hashboards, power supplies, fans. Technicians swap them from your shelf every morning. Without one, every fix is a contractor call-out. ${whyBtn('parts')}</p>
     <div class="tiles">
       <div class="tile"><span>Failed parts now</span><b class="num">${dead}</b><small>${u[510] ? `in ${u[510]} box${u[510] === 1 ? '' : 'es'}: ${u[488]} boards, ${u[489]} PSUs, ${u[490]} fans` : 'Everything is running'}</small></div>
       <div class="tile"><span>Hashrate lost to them</span><b class="num">${hash(u[511])}</b><small>${u[11] > 0 ? ((u[511] / (u[11] + u[511])) * 100).toFixed(1) + '% of your plant' : '—'}</small></div>
+      <div class="tile"><span>Fleet health</span><b class="num">${Math.round(u[577])}%</b><small>${u[578] ? `${u[578]} box${u[578] === 1 ? '' : 'es'} under 70%` : 'Nothing badly worn'}${u[571] ? ' · mechanics on it' : ''}</small></div>
       <div class="tile"><span>Wages</span><b class="num">${money(u[497])}/day</b><small>${money(u[498])} paid so far</small></div>
     </div>
     <h3>Crew</h3>
     <div class="rows">
       <div class="row"><span><b style="color:var(--ink)">Technicians</b><br><small class="dim">$${u[502]}/day each. Each swaps up to ${u[504]} parts a day from the shelf and cleans the 10 dustiest boxes.</small></span>${step('tech', u[480], 6)}</div>
+      <div class="row"><span><b style="color:var(--ink)">Cleaners</b><br><small class="dim">$${u[572]}/day each. Each blows out the ${u[579]} dustiest boxes and fan walls every day, before dust heats them up.</small></span>${step('clean', u[570], 6)}</div>
+      <div class="row"><span><b style="color:var(--ink)">Mechanics</b><br><small class="dim">$${u[573]}/day each. Each services the ${u[580]} most-worn running miners every day: +${u[581]}% health, no service bill.</small></span>${step('mech', u[571], 6)}</div>
       <div class="row"><span><b style="color:var(--ink)">Guards</b><br><small class="dim">$${u[503]}/day each. Each makes raids 25% less likely and may stop one at the gate.</small></span>${step('guard', u[481], 6)}</div>
+    </div>
+    <h3>Site upgrades</h3>
+    <div class="rows">
+      ${[[1, 'Intake filters', 'Dust settles 60% slower on every box and fan wall.', u[575]], [2, 'Health monitoring', 'Boxes throttle before they cook: 30% less wear from heat.', u[576]]].map(([bit, t, d, c]) =>
+        `<div class="row"><span><b style="color:var(--ink)">${t}</b><br><small class="dim">${d}</small></span>${u[574] & bit ? `<span class="tag" style="color:var(--pos)">${ic('check')} Installed</span>` : `<button class="btn mini btn-p" data-up="${bit}" ${u[0] < c ? 'disabled' : ''}>Buy ${money(c)}</button>`}</div>`).join('')}
     </div>
     <h3>Spares</h3>
     <table class="mtable"><thead><tr><th scope="col">Part</th><th scope="col">On the shelf</th><th scope="col">Failed now</th><th scope="col">Price</th><th scope="col">Keep stocked</th><th scope="col"></th></tr></thead><tbody>
@@ -1397,10 +1406,13 @@ function openCrew() {
     const a = b.dataset.st, d = +b.dataset.d;
     if (a === 'tech') { E.set_crew(Math.max(0, u[480] + d), u[481]); if (d > 0) unlockGoal('crew'); }
     else if (a === 'guard') { E.set_crew(u[480], Math.max(0, u[481] + d)); if (d > 0) unlockGoal('guards'); }
+    else if (a === 'clean') E.set_staff(Math.max(0, u[570] + d), u[571]);
+    else if (a === 'mech') E.set_staff(u[570], Math.max(0, u[571] + d));
     else { const i = +a.slice(1); E.set_spare_target(i, Math.max(0, u[485 + i] + d * (i === 2 ? 5 : 1))); }
     sfx('tap'); openCrew();
   });
   m.querySelectorAll('[data-buy]').forEach((b) => b.onclick = () => { E.buy_spares(+b.dataset.buy, 5); sfx('cash'); E.sync_ui(); drainToasts(UI()); openCrew(); });
+  m.querySelectorAll('[data-up]').forEach((b) => b.onclick = () => { if (E.buy_upgrade(+b.dataset.up)) sfx('build'); else sfx('bad'); E.sync_ui(); drainToasts(UI()); openCrew(); });
   const w = m.querySelector('[data-a=worst]'); if (w) w.onclick = () => { if (E.select_worst_parts()) { E.sync_ui(); closeModal(); openInspector(); } };
 }
 

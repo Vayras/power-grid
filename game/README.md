@@ -139,7 +139,11 @@ Upload `web/` to any static host. Make sure `.wasm` is served as `application/wa
 - **Parts and crew (Site tab):** each container is 10 machines with 30 hashboards, 10 power supplies and 40 fans
   (hydro: none) that fail on their own; wear, heat, overclocking, dust and brownouts raise the odds. Technicians
   ($25/day) swap 12 parts a day from your spares and clean the 10 dustiest boxes; without one, a contractor charges
-  $150 a visit plus 50% on parts you don't stock. Guards ($20/day) deter raids.
+  $100 a visit plus 50% on parts you don't stock. Guards ($20/day) deter raids.
+- **Upkeep (Site tab):** cleaners ($10/day) blow out the 15 dustiest boxes and fan walls a day; mechanics ($35/day)
+  service the 6 most-worn running miners a day (+6% health, no bill). One-off site upgrades: intake filters ($3,000,
+  dust settles 60% slower) and health monitoring ($5,000, 30% less heat wear). A manual service costs 15% of a new
+  box scaled by wear (a dead box: 22%).
 - **Pools (tap ₿):** a big FPPS pool nearby (2% fee, 25 ms), a budget FPPS pool overseas (1%, 240 ms) or a small
   PPLNS pool (0.5%, 60 ms, 2% of the network, pays only when it finds a block). Stale shares grow with latency;
   rejected shares with overclocking, heat over 80 °C and worn boxes.

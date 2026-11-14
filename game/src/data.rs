@@ -293,7 +293,7 @@ pub const PART_HAZARD: [f64; 3] = [0.00015, 0.0002, 0.0001];
 /// Spare part prices (game dollars, about a sixth of real like everything else).
 pub const PART_USD: [f64; 3] = [30.0, 12.0, 2.0];
 /// A contractor's call-out fee, and the markup on parts they bring.
-pub const CALLOUT_USD: f64 = 150.0;
+pub const CALLOUT_USD: f64 = 100.0;
 pub const RUSH_X: f64 = 1.5;
 pub const FAN_HEAT: f64 = 1.5;      // °C per dead fan in a box
 pub const TECH_WAGE: f64 = 25.0;    // $/day
@@ -302,6 +302,18 @@ pub const TECH_CLEANS: u32 = 10;    // dusty boxes one technician cleans per day
 pub const GUARD_WAGE: f64 = 20.0;   // $/day
 pub const GUARD_CUT: f64 = 0.25;    // each guard: raids 25% less likely, and a 30% chance to stop one
 pub const MAX_CREW: u32 = 6;
+// maintenance staff and site upgrades (build .38)
+pub const CLEANER_WAGE: f64 = 10.0;  // $/day
+pub const CLEANER_CLEANS: u32 = 15;  // dusty boxes and fan walls one cleaner blows out per day
+pub const MECH_WAGE: f64 = 35.0;     // $/day
+pub const MECH_SERVICES: u32 = 6;    // most-worn running miners one mechanic services per day
+pub const MECH_HEAL: f32 = 6.0;      // health each service gives back
+pub const UP_FILTERS: u32 = 1;       // intake filters: dust settles FILTER_DUST as fast
+pub const UP_MONITOR: u32 = 2;       // health monitoring: heat wear x MONITOR_WEAR (boxes throttle before they cook)
+pub const FILTER_USD: f64 = 3_000.0;
+pub const MONITOR_USD: f64 = 5_000.0;
+pub const FILTER_DUST: f64 = 0.4;
+pub const MONITOR_WEAR: f32 = 0.7;
 // Sites. Each is a real place with its own power, climate, rules and risks. Texas is the game as it always was.
 /// How wooded each site is, against Texas (map generation), and which tree sprites grow there (render).
 pub const SITE_TREES: [f64; 6] = [1.0, 0.15, 1.25, 0.5, 1.35, 0.25];

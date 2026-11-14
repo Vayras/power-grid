@@ -78,7 +78,7 @@ fn panic(_: &core::panic::PanicInfo) -> ! { core::arch::wasm32::unreachable() }
 static mut WORLD: Vec<Game> = Vec::new();
 static mut ACTIVE: usize = 0;
 static mut R: Option<Renderer> = None;
-static mut UI: [f64; 570] = [0.0; 570];
+static mut UI: [f64; 600] = [0.0; 600];
 static mut BUF: Vec<u8> = Vec::new();
 static mut ACC: f64 = 0.0;
 static mut SPEED: u32 = 1;
@@ -246,6 +246,8 @@ pub extern "C" fn switch_site(k: u32) {
 #[no_mangle] pub extern "C" fn set_site(s: u32) { unsafe { SITE = (s as usize).min(N_SITES - 1) as u8; } }
 /// Crew and spares.
 #[no_mangle] pub extern "C" fn set_crew(techs: u32, guards: u32) { g().set_crew(techs, guards); }
+#[no_mangle] pub extern "C" fn set_staff(cleaners: u32, mechanics: u32) { g().set_staff(cleaners, mechanics); }
+#[no_mangle] pub extern "C" fn buy_upgrade(bit: u32) -> u32 { let gg = g(); let r = gg.buy_upgrade(bit); r }
 #[no_mangle] pub extern "C" fn buy_spares(part: u32, n: u32) { g().buy_spares(part as usize, n); }
 #[no_mangle] pub extern "C" fn set_spare_target(part: u32, n: u32) { g().set_spare_target(part as usize, n); }
 #[no_mangle] pub extern "C" fn fix_sel() { let s = r().sel; if s >= 0 { g().fix_parts(s as usize); } }
@@ -422,7 +424,7 @@ unsafe fn fill_world() {
         for k in 0..N_SITES {
             let o = 520 + k * 7;
             if let Some(gm) = WORLD.get(k) {
-                let wages = gm.techs as f64 * TECH_WAGE + gm.guards as f64 * GUARD_WAGE;
+                let wages = gm.wages();
                 let alerts = gm.blds.iter().filter(|b| is_miner(b.kind) && (b.broken != 0 || b.parts_out() > 0)).count() as u32 + gm.short_nets + gm.unpowered;
                 u[o] = gm.site as f64; u[o + 1] = gm.my_th; u[o + 2] = gm.used_kw; u[o + 3] = gm.cap_kw;
                 u[o + 4] = gm.rev_day - gm.cost_day + gm.heat_day() - wages; u[o + 5] = alerts as f64;
@@ -551,7 +553,13 @@ unsafe fn fill_ui(gg: &Game, rr: &Renderer) {
             u[482 + p] = gg.spares[p] as f64; u[485 + p] = gg.spare_target[p] as f64; u[488 + p] = dead_now[p] as f64;
             u[491 + p] = gg.fails[p] as f64; u[494 + p] = gg.swapped[p] as f64; u[499 + p] = PART_USD[p];
         }
-        u[497] = gg.techs as f64 * TECH_WAGE + gg.guards as f64 * GUARD_WAGE; u[498] = gg.wages_paid;
+        u[497] = gg.wages(); u[498] = gg.wages_paid;
+        // maintenance staff and site upgrades (build .38, u[570..582])
+        u[570] = gg.cleaners as f64; u[571] = gg.mechanics as f64; u[572] = CLEANER_WAGE; u[573] = MECH_WAGE;
+        u[574] = gg.upgrades as f64; u[575] = FILTER_USD; u[576] = MONITOR_USD;
+        { let (mut n, mut hs, mut low) = (0.0, 0.0, 0.0); for b in gg.blds.iter() { if is_miner(b.kind) && b.broken == 0 { n += 1.0; hs += b.health as f64; if b.health < 70.0 { low += 1.0; } } }
+          u[577] = if n > 0.0 { hs / n } else { 100.0 }; u[578] = low; }
+        u[579] = CLEANER_CLEANS as f64; u[580] = MECH_SERVICES as f64; u[581] = MECH_HEAL as f64;
         u[502] = TECH_WAGE; u[503] = GUARD_WAGE; u[504] = TECH_SWAPS as f64; u[505] = CALLOUT_USD;
         u[510] = boxes as f64; u[511] = gg.parts_lost_th;
         u[512] = gg.site as f64; u[513] = gg.well_f; u[514] = (gg.st().dry && gg.dry_season()) as u8 as f64; u[515] = gg.grid_f();

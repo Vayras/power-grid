@@ -130,6 +130,8 @@ pub struct Game {
     // crew and spares: spares on the shelf, the level to keep them topped up to, failures and swaps so far
     pub techs: u32, pub guards: u32, pub spares: [u32; 3], pub spare_target: [u32; 3], pub fails: [u32; 3], pub swapped: [u32; 3],
     pub wages_paid: f64, pub parts_lost_th: f64,
+    // maintenance staff and one-off site upgrades (UP_* bits)
+    pub cleaners: u32, pub mechanics: u32, pub upgrades: u32,
     // where in the world: SITES index; well_f = a flare-gas well's output left (North Dakota)
     pub site: u8, pub well_f: f64, pub tariffs: u32,
     // several sites: a follower copies the network and wallet from the lead site; day_off keeps the calendar shared
@@ -176,6 +178,7 @@ impl Game {
             piped: Vec::new(), gh_kw: Vec::new(), heat_kw: 0.0, heat_earned: 0.0,
             pool: 0, pool_switches: 0, acc_th: 0.0, pplns_paid: 0.0, pplns_exp: 0.0, pool_blocks: 0,
             techs: 0, guards: 0, spares: [0; 3], spare_target: [0; 3], fails: [0; 3], swapped: [0; 3], wages_paid: 0.0, parts_lost_th: 0.0,
+            cleaners: 0, mechanics: 0, upgrades: 0,
             site, well_f: 1.0, tariffs: 0, follower: false, day_off: 0, unlocked_x: [false; 2], milestones: 0, core_tries: 0,
         };
         g.grid_usd = SITES[site as usize].grid + GRID_EXTRA[diff.min(2) as usize];
@@ -495,6 +498,7 @@ impl Game {
     fn roll_weather(&mut self) {
         // dust settles every day; rain rinses some off; dust storms coat everything
         let add = match self.weather { W_DUST => 22.0, W_RAIN => -12.0, W_STORM => -18.0, _ => 1.6 };
+        let add: f32 = if add > 0.0 && self.upgrades & UP_FILTERS != 0 { add * FILTER_DUST as f32 } else { add };
         for b in self.blds.iter_mut() {
             if is_miner(b.kind) || b.kind == K_FAN || b.kind == K_IMMERSION {
                 let run = if b.off == 0 && b.broken == 0 { 1.0 } else { 0.3 };
@@ -618,7 +622,7 @@ impl Game {
         let b = &self.blds[idx];
         if !is_miner(b.kind) { return 0.0; }
         let price = self.new_price(b.kind); // parts cost what the market says
-        if b.broken != 0 { price * 0.3 } else { price * 0.25 * (1.0 - b.health as f64 / 100.0) }
+        if b.broken != 0 { price * 0.22 } else { price * 0.15 * (1.0 - b.health as f64 / 100.0) }
     }
 
     /// Miners go to a broker at today's used price, less their cut, scaled by condition (a dead one is sold
@@ -759,8 +763,20 @@ impl Game {
             dusty.sort_unstable_by(|a, b| self.blds[*b].dust.partial_cmp(&self.blds[*a].dust).unwrap_or(core::cmp::Ordering::Equal));
             for x in dusty.into_iter().take((self.techs * TECH_CLEANS) as usize) { self.blds[x].dust = 0.0; }
         }
+        // cleaners: blow out the dustiest boxes and fan walls, from a lower threshold than the technicians bother with
+        if self.cleaners > 0 {
+            let mut dusty: Vec<usize> = (0..self.blds.len()).filter(|&x| { let k = self.blds[x].kind; (is_miner(k) || k == K_FAN || k == K_IMMERSION) && self.blds[x].dust >= 8.0 }).collect();
+            dusty.sort_unstable_by(|a, b| self.blds[*b].dust.partial_cmp(&self.blds[*a].dust).unwrap_or(core::cmp::Ordering::Equal));
+            for x in dusty.into_iter().take((self.cleaners * CLEANER_CLEANS) as usize) { self.blds[x].dust = 0.0; }
+        }
+        // mechanics: service the most-worn running miners (health back, no parts swapped; that's the technicians' job)
+        if self.mechanics > 0 {
+            let mut worn: Vec<usize> = (0..self.blds.len()).filter(|&x| is_miner(self.blds[x].kind) && self.blds[x].broken == 0 && self.blds[x].health < 97.0).collect();
+            worn.sort_unstable_by(|a, b| self.blds[*a].health.partial_cmp(&self.blds[*b].health).unwrap_or(core::cmp::Ordering::Equal));
+            for x in worn.into_iter().take((self.mechanics * MECH_SERVICES) as usize) { let h = &mut self.blds[x].health; *h = (*h + MECH_HEAL).min(100.0); }
+        }
         for p in 0..3 { if self.spares[p] < self.spare_target[p] { let n = self.spare_target[p] - self.spares[p]; let c = n as f64 * PART_USD[p]; if self.cash >= c { self.cash -= c; self.spares[p] += n; } } }
-        let w = self.techs as f64 * TECH_WAGE + self.guards as f64 * GUARD_WAGE;
+        let w = self.wages();
         self.cash -= w; self.wages_paid += w;
         let left: u32 = self.blds.iter().filter(|b| is_miner(b.kind)).map(|b| b.parts_out()).sum();
         if failed > 0 && left > 0 && (self.techs == 0 || swapped == 0) && left >= 3 { self.toast(T_PARTS_FAILED, failed as f64); }
@@ -789,9 +805,24 @@ impl Game {
     pub fn set_crew(&mut self, techs: u32, guards: u32) {
         self.techs = techs.min(MAX_CREW); self.guards = guards.min(MAX_CREW); self.sync_workers();
     }
+    pub fn set_staff(&mut self, cleaners: u32, mechanics: u32) {
+        self.cleaners = cleaners.min(MAX_CREW); self.mechanics = mechanics.min(MAX_CREW); self.sync_workers();
+    }
+    /// Everyone on the payroll, per day.
+    pub fn wages(&self) -> f64 {
+        self.techs as f64 * TECH_WAGE + self.guards as f64 * GUARD_WAGE + self.cleaners as f64 * CLEANER_WAGE + self.mechanics as f64 * MECH_WAGE
+    }
+    pub fn upgrade_price(bit: u32) -> f64 { match bit { UP_FILTERS => FILTER_USD, UP_MONITOR => MONITOR_USD, _ => 0.0 } }
+    /// Buy a one-off site upgrade. Returns 1 if bought.
+    pub fn buy_upgrade(&mut self, bit: u32) -> u32 {
+        let c = Game::upgrade_price(bit);
+        if c <= 0.0 || self.upgrades & bit != 0 { return 0; }
+        if self.cash < c { self.toast(T_NO_CASH, 0.0); return 0; }
+        self.cash -= c; self.upgrades |= bit; 1
+    }
     /// One walking figure per crew member on top of the six regulars.
     pub fn sync_workers(&mut self) {
-        let want = (6 + self.techs + self.guards) as usize;
+        let want = (6 + self.techs + self.guards + self.cleaners + self.mechanics) as usize;
         while self.workers.len() < want { let x = 22.0 + self.rng.f() as f32 * 5.0; let y = 22.0 + self.rng.f() as f32 * 5.0; self.workers.push(Worker { x, y, tx: x, ty: y, step: 0 }); }
         self.workers.truncate(want);
     }
@@ -1119,7 +1150,8 @@ impl Game {
             let t = self.blds[x].temp;
             if t > 95.0 && self.blds[x].fire == 0 && self.rng.f() < 0.35 { self.blds[x].fire = 1; }
             if t < 88.0 { self.blds[x].fire = 0; }
-            let wear = (0.04 + if t > 75.0 { (t - 75.0) * 0.35 } else { 0.0 }) * self.blds[x].tune_wear() as f32 + if self.blds[x].fire != 0 { 18.0 } else { 0.0 } + if sag { 1.5 } else { 0.0 }; // brownouts stress PSUs
+            let mon = if self.upgrades & UP_MONITOR != 0 { MONITOR_WEAR } else { 1.0 };
+            let wear = (0.04 + if t > 75.0 { (t - 75.0) * 0.35 * mon } else { 0.0 }) * self.blds[x].tune_wear() as f32 + if self.blds[x].fire != 0 { 18.0 } else { 0.0 } + if sag { 1.5 } else { 0.0 }; // brownouts stress PSUs
             self.blds[x].health -= wear;
             if self.blds[x].health <= 0.0 {
                 self.blds[x].health = 0.0; self.blds[x].broken = 1; self.blds[x].fire = 0; self.toast(T_BROKE, x as f64);
@@ -1578,7 +1610,9 @@ impl Game {
             // build .27: backers' milestones
             self.milestones as f64,
             // build .32: failed core trials
-            self.core_tries as f64];
+            self.core_tries as f64,
+            // build .38: cleaners, mechanics, site upgrades
+            self.cleaners as f64, self.mechanics as f64, self.upgrades as f64];
         // v9+: version, then how many scalars follow, so later builds can append fields without breaking old saves
         f(scal[0]); f((scal.len() - 1) as f64);
         for v in scal.iter().skip(1) { f(*v); }
@@ -1637,6 +1671,7 @@ impl Game {
         // a save from before milestones: the ones it has already passed count as paid, so loading it isn't a windfall
         g.milestones = if has(113) { fs[113] as u32 } else { u32::MAX };
         if has(114) { g.core_tries = fs[114] as u32; }
+        if has(117) { g.cleaners = (fs[115] as u32).min(MAX_CREW); g.mechanics = (fs[116] as u32).min(MAX_CREW); g.upgrades = fs[117] as u32; }
         if has(110) { g.follower = fs[109] != 0.0; g.day_off = fs[110] as u64; }
         if has(108) { g.site = (fs[106] as usize).min(N_SITES - 1) as u8; g.well_f = clamp(fs[107], 0.25, 1.0); g.tariffs = fs[108] as u32; }
         if has(105) {
