@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-14.34';
+const BUILD = 'build 2026-11-14.35';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -123,6 +123,7 @@ try {
   const px = cx.getImageData(0, 0, aw, ah).data;
   const ptr = E.atlas_buf();
   new Uint8Array(E.memory.buffer, ptr, aw * ah * 4).set(px);
+  E.atlas_ready();
   step(80, 'Waking the Foreman…');
   if (document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]);
 } catch (err) {
@@ -136,15 +137,18 @@ window.PG = { get E() { return E; }, UI, finale: () => showFinale(UI()) };
 // ------------------------------------------------------------------ canvas + loop
 const canvas = $('#view');
 const ctx = canvas.getContext('2d', { alpha: false });
-let zoom = innerWidth >= 900 ? 2 : 1, fbW = 0, fbH = 0, imgData = null;
+let zoom = innerWidth >= 900 ? 2 : 1, fbW = 0, fbH = 0, fbD = 0, imgData = null;
+// The voxel atlas has two densities: 1 (a tile is 64 px) and 2 (128 px). A tile shows 64*zoom CSS px, so the
+// framebuffer is CSS size * density / zoom. Use the hi-res density when the screen has the pixels for it and
+// the frame stays under ~3.2 MP; the browser scales the frame smoothly.
 function fit() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const dprR = Math.max(1, Math.round(dpr));
-  const S = zoom * dprR;
-  const w = Math.ceil(innerWidth * dpr / S), h = Math.ceil(innerHeight * dpr / S);
-  if (w === fbW && h === fbH) return;
-  fbW = w; fbH = h; canvas.width = w; canvas.height = h;
-  E.resize(w, h); imgData = ctx.createImageData(w, h);
+  let d = zoom * dpr >= 1.5 ? 2 : 1;
+  if (d === 2 && innerWidth * innerHeight * 4 / (zoom * zoom) > 3.2e6) d = 1;
+  const w = Math.ceil(innerWidth * d / zoom), h = Math.ceil(innerHeight * d / zoom);
+  if (w === fbW && h === fbH && d === fbD) return;
+  fbW = w; fbH = h; fbD = d; canvas.width = w; canvas.height = h;
+  E.set_scale(d); E.resize(w, h); imgData = ctx.createImageData(w, h);
   redraw = true; // resizing a canvas wipes it: paint it again even when no run is going
 }
 addEventListener('resize', fit);
@@ -2324,7 +2328,7 @@ function newRunScreen() {
     <div><span class="lbl">Difficulty</span><div class="diffs" style="margin-top:6px">${DIFFS.map(([n, d], i) => `<button class="btn ${i === pickDiff ? 'on' : ''}" data-d="${i}"><span class="px" style="font-size:13px;color:${i === pickDiff ? 'var(--volt)' : 'var(--ink)'}">${n}</span><small>${d}</small></button>`).join('')}</div></div>
     <div class="choices" style="flex-direction:row;flex-wrap:wrap"><button class="btn btn-p" data-a="start" style="font-size:16px">${ic('play')}Start run</button>${has ? '<button class="btn" data-a="cont">Continue saved run</button>' : ''}${!has && localStorage.getItem('pg-save-prev') ? '<button class="btn" data-a="prev">Restore previous run</button>' : ''}</div>
     ${historyList()}
-    <span style="font-size:12px;color:var(--muted)">Plays offline once loaded. Saves stay in this browser. Sprites: OpenGFX (GPL-2.0), ground textures by rubberduck (CC0), and original art. · <a href="#" data-a="donate" style="color:var(--btc)">Support the game</a> · ${BUILD}</span>`);
+    <span style="font-size:12px;color:var(--muted)">Plays offline once loaded. Saves stay in this browser. Voxel art made for this game. · <a href="#" data-a="donate" style="color:var(--btc)">Support the game</a> · ${BUILD}</span>`);
   const m = $('#modal');
   m.querySelector('[data-a=donate]').onclick = (e) => { e.preventDefault(); openDonate(newRunScreen); };
   m.querySelector('[data-a=reroll]').onclick = () => { pickSeed = (Math.random() * 2 ** 32) >>> 0; newRunScreen(); };

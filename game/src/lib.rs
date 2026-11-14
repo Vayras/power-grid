@@ -132,6 +132,9 @@ pub extern "C" fn atlas_buf() -> *mut u8 {
         rr.atlas.as_mut_ptr() as *mut u8
     }
 }
+#[no_mangle] pub extern "C" fn atlas_ready() { r().atlas_ready(); }
+/// Framebuffer density: 1 = base tile (64x32 px), 2 = hi-res (128x64). Keeps the view centred.
+#[no_mangle] pub extern "C" fn set_scale(s: i32) { r().set_scale(s); }
 #[no_mangle] pub extern "C" fn atlas_w() -> u32 { sprites::ATLAS_W as u32 }
 #[no_mangle] pub extern "C" fn atlas_h() -> u32 { sprites::ATLAS_H as u32 }
 

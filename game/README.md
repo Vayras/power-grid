@@ -29,9 +29,19 @@ rustup target add wasm32-unknown-unknown
 ./build.sh                       # writes web/game.wasm
 ```
 
-Sprites: `python3 tools/build_atlas.py` rebuilds `web/atlas.png`, `web/sprites.json` and `src/sprites.rs`
-from the OpenGFX cut-outs in `../assets/sprites/opengfx` (override with `PG_SPRITES=...`) plus hand-drawn sprites in
-`tools/ttdmap.py` (containers, greenhouse...). Needs Pillow.
+Sprites: every building, tree, person and ground tile is a voxel model in `tools/voxel/models.py`, rendered offline
+by a small voxel renderer (`tools/voxel/vox.py`: sun with soft shadows, sky light with ambient occlusion, a contact
+shadow on the ground, 2x supersampling) and packed into `web/atlas.png`, `web/sprites.json` and `src/sprites.rs`:
+
+```sh
+python3 -m venv tools/voxel/.venv && tools/voxel/.venv/bin/pip install numpy pillow
+tools/voxel/.venv/bin/python tools/voxel/build.py                 # ~25 s, then ./build.sh
+tools/voxel/.venv/bin/python tools/voxel/build.py --sheet sheet.png --only B_GAS,TREE_5   # preview a few
+```
+
+The atlas is drawn at 2x the base tile (128x64 px). The renderer box-filters a 1x copy at load and picks a density
+per frame, so the canvas never needs more pixels than the screen shows. The old OpenGFX builder (`tools/build_atlas.py`)
+is kept for reference but no longer feeds the game.
 
 ## Balance simulator
 
@@ -151,9 +161,10 @@ Upload `web/` to any static host. Make sure `.wasm` is served as `application/wa
 ```
 src/lib.rs       exports to JS, allocator, UI mailbox
 src/game.rs      map generation, simulation, events, save/load
-src/render.rs    software renderer (isometric, pixel art)
+src/render.rs    software renderer (isometric, voxel sprites at 1x or 2x density)
 src/data.rs      building kinds, power tree, events
 src/sprites.rs   generated sprite table
 web/             index.html, style.css, game.js, game.wasm, atlas.png, sw.js, manifest
-tools/           atlas builder + sprite drawing code
+tools/voxel/     voxel models, renderer and atlas builder
+tools/           balance simulator, history builder, legacy pixel-art atlas builder
 ```

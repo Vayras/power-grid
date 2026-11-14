@@ -1,3 +1,4 @@
 /target
 tools/sim/target
 __pycache__/
+tools/voxel/.venv/

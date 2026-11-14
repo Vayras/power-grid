@@ -26,7 +26,7 @@
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;background:#E9E7E1;color:var(--ink);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;font-feature-settings:"cv11","ss01";-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
 button{font:inherit;color:inherit}
-#view{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;display:block}
+#view{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;image-rendering:auto;touch-action:none;display:block}
 
 /* ---------------------------------------------------------------- primitives */
 .px{font-family:inherit;font-weight:600;letter-spacing:-.01em}
@@ -170,7 +170,7 @@ button:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
 .item.on{box-shadow:inset 0 0 0 2px var(--ink),var(--shadow-2)}
 .item.locked{opacity:.5;cursor:not-allowed}
 .item .thumb{height:56px;border-radius:12px;background:var(--sunk);display:flex;align-items:flex-end;justify-content:center;overflow:hidden;margin-bottom:4px}
-.thumb i{display:block;image-rendering:pixelated;background-image:url(atlas.png);background-repeat:no-repeat}
+.thumb i{display:block;background-image:url(atlas.png);background-repeat:no-repeat}
 .item .n{font-weight:600;font-size:13px;line-height:17px}
 .item .s{font-size:11px;line-height:15px;color:var(--muted)}
 .item .c{font-size:13px;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums;margin-top:auto}
@@ -297,7 +297,7 @@ button:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
 .tier.locked .thumb{filter:grayscale(1) opacity(.5)}
 .tier .thumb{height:64px;border-radius:12px;background:#fff;display:flex;align-items:flex-end;justify-content:center;overflow:hidden}
 .tier.cur .thumb{background:var(--sunk)}
-.tier .thumb i{display:block;image-rendering:pixelated;background-image:url(atlas.png);background-repeat:no-repeat}
+.tier .thumb i{display:block;background-image:url(atlas.png);background-repeat:no-repeat}
 .dots{display:flex;gap:3px}.dots span{width:8px;height:8px;border-radius:50%;background:var(--sunk-2)}.dots span.on{background:var(--ink)}
 .reqs{display:flex;flex-direction:column;gap:6px;font-size:13px}
 .req{display:flex;gap:8px;align-items:center}.req i{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--line-2);display:grid;place-items:center;font-style:normal;font-size:11px}

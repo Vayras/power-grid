@@ -1,5 +1,13 @@
 # Power Grid: art credits
 
+## Voxel art (current)
+Every sprite the game ships (terrain, trees, buildings, people, the delivery truck) is an original voxel model in
+`tools/voxel/models.py`, rendered by `tools/voxel/vox.py`. No third-party art is in `web/atlas.png`.
+
+## Earlier pixel art (no longer shipped)
+The sections below credit the art used up to build .34. Its source sheets and the old builder (`tools/build_atlas.py`)
+are kept for reference only.
+
 ## OpenGFX (GPL-2.0)
 Terrain, trees, power-station, gas-plant and building sprites in `../assets/sprites/opengfx/` and baked into `web/atlas.png`
 come from **OpenGFX**, the open graphics base set for OpenTTD, by the OpenGFX team and contributors.
