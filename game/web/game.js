@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-14.32';
+const BUILD = 'build 2026-11-14.34';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -307,7 +307,7 @@ function openSettings() {
   const t = m.querySelector('[data-a=test]'); if (t) t.onclick = () => speak("Kid, a box that costs more in power than it mines is a space heater.");
   m.querySelector('[data-a=skip]').onclick = () => { FM.skip(); setTimeout(() => { const sm = m.querySelector('[data-a=skip]'); if (sm) sm.previousElementSibling.querySelector('small').textContent = FM.title; }, 600); };
 }
-$('#b-music').onclick = openSettings;
+{ const bm = $('#b-music'); if (bm) bm.onclick = openSettings; }
 
 // ------------------------------------------------------------------ sound effects + plant ambience (all synthesized, no files)
 let actx = null, noiseBuf = null, amb = null;
@@ -440,6 +440,12 @@ let viewMask = 0, viewAuto = 0;
 const applyView = () => { E.set_view(viewMask | viewAuto); document.querySelectorAll('#views [data-view]').forEach((b) => b.setAttribute('aria-pressed', !!(viewMask & +b.dataset.view))); };
 document.querySelectorAll('#views [data-view]').forEach((b) => b.onclick = () => { viewMask ^= +b.dataset.view; applyView(); sfx('tap'); });
 function showView(bit) { viewMask |= bit; applyView(); }
+// Layers: the map-view popover off the round button rail
+const layersOpen = (open) => { $('#layers').hidden = !open; $('#b-layers').setAttribute('aria-expanded', open); };
+$('#b-layers').onclick = (e) => { e.stopPropagation(); layersOpen($('#layers').hidden); sfx('tap'); };
+$('#layers-x').onclick = () => layersOpen(false);
+$('#layers-x').innerHTML = ic('x');
+addEventListener('pointerdown', (e) => { if (!$('#layers').hidden && !e.target.closest('#layers,#b-layers')) layersOpen(false); });
 function thumb(sprName, boxH) {
   const r = SPR[sprName]; const sc = Math.min(1, (boxH - 4) / r[3], 110 / r[2]);
   return `<i style="width:${r[2]}px;height:${r[3]}px;background-position:-${r[0]}px -${r[1]}px;transform:scale(${sc});transform-origin:bottom center;margin-bottom:2px"></i>`;
@@ -1028,7 +1034,8 @@ const WHY = {
   capitulation: ['Miner capitulation', 'When hashprice falls below what older machines cost to run, their owners switch them off and sell them. More used machines come up for sale, at lower prices. It\'s the best time to buy if your power is cheap.', 'market'],
   cash: ['Cash', 'Dollars in the bank. Power bills, repairs and new machines come out of it every block. Bitcoin only turns into cash when you sell it.'],
   hashrate: ['Your hashrate', 'How many guesses your running boxes make every second. Your share of the network\'s total hashrate is your share of every block\'s reward, so this number against the network\'s is what you earn. It drops when boxes are off, unpowered, too hot, worn or missing parts.', 'hashprice'],
-  net: ['Net per day', 'What your bitcoin earnings are worth per day at today\'s price, minus what your power costs per day. It moves with the price, the difficulty and your power mix.', 'hashprice'],
+  net: ['Net per day', 'What your bitcoin earnings are worth per day at today\'s price, minus what your power and crew cost per day. The percentage is your profit margin: how much of every dollar mined you keep. It moves with the price, the difficulty and your power mix.', 'hashprice'],
+  spend: ['Spend per day', 'What the plant costs to run each day: the power bill for everything switched on, plus technicians and guards. Hover it to see the split. Repairs and new machines are one-off costs and aren\'t counted.'],
   price: ['Bitcoin price', 'In a live run this is today\'s real price from mempool.space, refreshed every few minutes. In a simulated run it wanders around a slowly rising trend, with crashes and pumps.'],
   power: ['Power used and capacity', 'Used is what your machines draw right now. Capacity is what your sources can supply. If a network asks for more than it gets, every box on it slows down.'],
   hashprice: ['Hashprice', 'What one unit of hashrate earns per day: (block subsidy + fees) × blocks per day × price ÷ network hashrate. It is the number miners watch most. It falls when difficulty rises or the price drops, and it halves at every halving.', 'charts'],
@@ -1074,7 +1081,7 @@ const SAT = 1e8;
 const mulberry = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 // fee-rate classes in sat/vB, and a one-hue ramp from the panel up to bright orange (validated as ordinal)
 const FEE_BINS = [0, 1, 2, 4, 10, 30, 100];
-const FEE_RAMP = ['#5E4128', '#7A4E26', '#985E25', '#B86E22', '#D9801F', '#F29B3A', '#FFC27A'];
+const FEE_RAMP = ['#FCE9D2', '#F9D3A6', '#F5B871', '#F09A3E', '#E07B17', '#BF600C', '#8F4508'];
 const binOf = (r) => { let b = 0; for (let i = 0; i < FEE_BINS.length; i++) if (r >= FEE_BINS[i]) b = i; return b; };
 const binLabel = (i) => i === FEE_BINS.length - 1 ? `${FEE_BINS[i]}+` : `${FEE_BINS[i]}–${FEE_BINS[i + 1]}`;
 const satvb = (r) => r < 1 ? r.toFixed(2) : r < 10 ? r.toFixed(1) : Math.round(r).toString();
@@ -1271,8 +1278,8 @@ function renderCharts(body) {
         <div class="tile"><span>Hashprice today</span><b class="num">${money(hp)}/PH/day</b><small>Your run: ${money(u[22] * 1000)}/PH/day</small></div>
         <div class="tile"><span>Next halving in your run</span><b class="num">${(nextHalv - u[6]).toLocaleString()} blocks</b><small>≈ ${Math.round((nextHalv - u[6]) / 144)} game days</small></div>
       </div>
-      ${chartCard('hr', 'Network hashrate', 'EH/s, 7-day average', avg7(d.hashrate), '#1FA8A2', (v) => v.toFixed(0) + ' EH/s', false)}
-      ${chartCard('df', 'Difficulty', 'trillion', d.difficulty, '#1FA8A2', (v) => v.toFixed(1) + ' T', true)}
+      ${chartCard('hr', 'Network hashrate', 'EH/s, 7-day average', avg7(d.hashrate), '#0E918C', (v) => v.toFixed(0) + ' EH/s', false)}
+      ${chartCard('df', 'Difficulty', 'trillion', d.difficulty, '#0E918C', (v) => v.toFixed(1) + ' T', true)}
       ${chartCard('hp', 'Hashprice', '$ per PH/s per day, 7-day average', avg7(d.hashprice), '#D9711C', (v) => '$' + v.toFixed(1), false)}
       ${chartCard('fe', 'Fees per block, last 3 months', 'BTC', d.fees, '#D9711C', (v) => '₿ ' + v.toFixed(3), false)}`;
     // draw each chart at its real pixel width so text and strokes aren't stretched
@@ -1615,26 +1622,26 @@ function animateMempool(cv, mp) {
     }
     for (const s of pool) { s.x += (s.tx - s.x) * Math.min(1, dt * 14); s.y += (s.ty - s.y) * Math.min(1, dt * 14); }
     ctx2.clearRect(0, 0, W, H);
-    ctx2.font = '12px Rubik, sans-serif';
-    ctx2.fillStyle = '#BDB7A8'; ctx2.fillText(`Mempool · ${pool.length} squares waiting`, 0, 14);
-    if (pool.length > CAP) { const lbl = `above the line: next block, ${satvb(pool[CAP - 1].rate)} sat/vB and up`; ctx2.fillStyle = '#F5F0E6'; ctx2.fillText(lbl, Math.max(0, POOLW - ctx2.measureText(lbl).width), 14); }
+    ctx2.font = '12px Inter, sans-serif';
+    ctx2.fillStyle = '#6B7280'; ctx2.fillText(`Mempool · ${pool.length} squares waiting`, 0, 14);
+    if (pool.length > CAP) { const lbl = `above the line: next block, ${satvb(pool[CAP - 1].rate)} sat/vB and up`; ctx2.fillStyle = '#111418'; ctx2.fillText(lbl, Math.max(0, POOLW - ctx2.measureText(lbl).width), 14); }
     for (const s of pool) { ctx2.fillStyle = FEE_RAMP[binOf(s.rate)]; ctx2.fillRect(s.x, s.y, CELL, CELL); }
     // the cut line: the first 120 squares (highest fee rates) fit in the next block; it steps where the block ends mid-row
     if (pool.length > CAP) {
       const STEP = CELL + GAP, r = Math.floor(CAP / COLS), c = CAP % COLS, top = 26 + r * STEP - GAP / 2, bot = top + STEP;
-      ctx2.strokeStyle = '#F5F0E6'; ctx2.lineWidth = 2; ctx2.beginPath();
+      ctx2.strokeStyle = '#111418'; ctx2.lineWidth = 2; ctx2.beginPath();
       if (c === 0) { ctx2.moveTo(0, top); ctx2.lineTo(POOLW, top); } else { ctx2.moveTo(0, bot); ctx2.lineTo(c * STEP - GAP / 2, bot); ctx2.lineTo(c * STEP - GAP / 2, top); ctx2.lineTo(POOLW, top); }
       ctx2.stroke(); ctx2.lineWidth = 1;
     }
     // the chain on the right
-    const cx = POOLW + 24; ctx2.fillStyle = '#BDB7A8'; ctx2.fillText('Mined', cx, 14);
-    chain.slice(-4).forEach((b, k, arr) => { const y = 26 + (arr.length - 1 - k) * 50; ctx2.fillStyle = FEE_RAMP[binOf(b.med)]; ctx2.fillRect(cx, y, 40, 40); ctx2.fillStyle = '#F5F0E6'; ctx2.fillText(`${satvb(b.min)}+ sat/vB`, cx + 48, y + 16); ctx2.fillStyle = '#BDB7A8'; ctx2.fillText(k === arr.length - 1 ? 'just now' : `${(arr.length - 1 - k) * 10} min ago`, cx + 48, y + 32); });
+    const cx = POOLW + 24; ctx2.fillStyle = '#6B7280'; ctx2.fillText('Mined', cx, 14);
+    chain.slice(-4).forEach((b, k, arr) => { const y = 26 + (arr.length - 1 - k) * 50; ctx2.fillStyle = FEE_RAMP[binOf(b.med)]; ctx2.fillRect(cx, y, 40, 40); ctx2.fillStyle = '#111418'; ctx2.fillText(`${satvb(b.min)}+ sat/vB`, cx + 48, y + 16); ctx2.fillStyle = '#6B7280'; ctx2.fillText(k === arr.length - 1 ? 'just now' : `${(arr.length - 1 - k) * 10} min ago`, cx + 48, y + 32); });
     if (flying) {
       const p = Math.min(1, (now - flying.t) / 700);
       flying.squares.forEach((s, k) => { const tx = cx + (k % 10) * 4, ty = 26 + Math.floor(k / 10) * 3.3; ctx2.fillStyle = FEE_RAMP[binOf(s.rate)]; const x = s.x + (tx - s.x) * p, y = s.y + (ty - s.y) * p, sz = CELL + (4 - CELL) * p; ctx2.fillRect(x, y, sz, sz); });
       if (p >= 1) { chain.push({ min: flying.min, med: flying.med }); flying = null; sfx('tap'); }
     }
-    if (hover) { const txt = `~30 txs at ${satvb(hover.rate)} sat/vB`; const w = ctx2.measureText(txt).width + 12; const x = Math.min(W - w, hover.x), y = Math.max(0, hover.y - 22); ctx2.fillStyle = '#0d100d'; ctx2.fillRect(x, y, w, 18); ctx2.fillStyle = '#F5F0E6'; ctx2.fillText(txt, x + 6, y + 13); }
+    if (hover) { const txt = `~30 txs at ${satvb(hover.rate)} sat/vB`; const w = ctx2.measureText(txt).width + 12; const x = Math.min(W - w, hover.x), y = Math.max(0, hover.y - 22); ctx2.fillStyle = '#111418'; ctx2.fillRect(x, y, w, 18); ctx2.fillStyle = '#FFFFFF'; ctx2.fillText(txt, x + 6, y + 13); }
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
@@ -1645,15 +1652,19 @@ let shownEvent = -1, overShown = false, goalTick = 0;
 function updateUI() {
   const u = UI();
   $('#h-cash .v').textContent = money(u[0]);
-  $('#h-cash .v').style.color = u[0] < 0 ? 'var(--alarm)' : 'var(--cash)';
+  $('#h-cash .v').style.color = u[0] < 0 ? 'var(--alarm)' : '';
   $('#h-btc .v').textContent = btcf(u[1]);
-  const net = u[3]; const nv = $('#h-net .v');
-  nv.textContent = (net < 0 ? '▼ ' : '▲ ') + money(net); nv.style.color = net < 0 ? 'var(--alarm)' : 'var(--ink)';
+  // spend = power bill + crew wages; income = mining + heat sold; profit % = net / income
+  const spend = u[24] + u[497], income = u[25] + u[392];
+  $('#h-spend .v').textContent = money(spend);
+  { const t = `Per day: power ${money(u[24])}${u[497] > 0 ? `, crew ${money(u[497])}` : ''}. Mining earns ${money(u[25])}${u[392] > 0 ? `, heat sales ${money(u[392])}` : ''}.`; const c = $('#h-spend'); if (c.title !== t) c.title = t; }
+  const net = u[3]; const nv = $('#h-net .v'); const pct = income > 0 ? Math.round(net / income * 100) : null;
+  nv.textContent = (net < 0 ? '▼ ' : '▲ ') + money(net) + (pct === null ? '' : ` · ${pct}%`); nv.style.color = net < 0 ? 'var(--alarm)' : 'var(--cash)';
   $('#h-hash .v').textContent = hash(u[11]);
   { const sh = u[12] > 0 ? u[11] / u[12] * 100 : 0; const t = `Your hashrate: ${hash(u[11])}, ${sh >= 0.01 ? sh.toFixed(2) : sh.toPrecision(1)}% of the network's ${hash(u[12])}`; const c = $('#h-hash'); if (c.title !== t) c.title = t; }
   $('#h-pow .v').textContent = `${power(u[4])} / ${power(u[5])}`;
   { const l = u[346] === 1 ? `Power · $${Math.round(u[347]).toLocaleString('en-US')}` : 'Power'; const le = $('#h-pow .lbl'); if (le.textContent !== l) le.textContent = l; }
-  $('#h-pow .v').style.color = u[245] > 0.5 ? 'var(--alarm)' : 'var(--volt)';
+  $('#h-pow .v').style.color = u[245] > 0.5 ? 'var(--alarm)' : '';
   $('#h-px .v').textContent = money(u[2]);
   if (running && !u[21]) recordMarket(u);
   $('#h-px .lbl').innerHTML = u[318] ? 'BTC then' : u[241] ? '<i class="live"></i>BTC live' : 'BTC sim';
@@ -1696,7 +1707,7 @@ function renderHoverTip(u) {
     const tc = temp > 85 ? 'var(--alarm)' : temp > 70 ? 'var(--btc)' : 'var(--hash)';
     h += `<span style="color:${st[1]}">${st[0]}</span>`;
     if (!broken && !off) h += `<span>${ic('therm')} <b style="color:${tc}">${temp.toFixed(0)} °C</b>${cool > 0.5 ? ` · <span style="color:var(--hash)">${ic('snow')} −${cool.toFixed(0)} °C</span>` : ' · <span class="dim">no fan air</span>'}${u[276] > 0 ? ` · <span class="dim">${u[276]} packed</span>` : ''}</span>`;
-    if (u[290] >= 10) h += `<span style="color:#c9a06a">${ic('dust')} dust ${u[290].toFixed(0)}% (+${(u[290] * 0.15).toFixed(0)} °C)</span>`;
+    if (u[290] >= 10) h += `<span style="color:#A16207">${ic('dust')} dust ${u[290].toFixed(0)}% (+${(u[290] * 0.15).toFixed(0)} °C)</span>`;
     h += `<span>${ic('heart')} ${hp.toFixed(0)}% · ${hash(u[270])}${f > 0 && f < 0.999 ? ` · <span style="color:var(--btc)">${Math.round(f * 100)}% power</span>` : ''}</span>`;
     if (u[273] > 0) h += `<span class="dim">${ic('shield')} outside the fence</span>`;
   } else if (isPow(kind)) {
@@ -1761,6 +1772,7 @@ setInterval(() => { dockDirty = true; }, 1500);
 $('#h-pow').onclick = () => { viewMask ^= 2; applyView(); };
 $('#h-cash').onclick = () => why('cash');
 $('#h-net').onclick = () => why('net');
+$('#h-spend').onclick = () => why('spend');
 $('#h-hash').onclick = () => why('hashrate');
 $('#h-px').onclick = () => why('price');
 $('#pill').onclick = () => openNetwork('mempool');
@@ -2034,8 +2046,8 @@ function openLadder() {
     <p>Max out a source (level 3) to open what grows from it. The grid opens two branches: <b>fossil</b> is cheap to build and pays for fuel; <b>renewable</b> is free to run but follows the weather until hydro. Coal or wind opens <b>nuclear</b>. Fusion or orbital solar opens the core. Diesel is a backup you can build any time. ${whyBtn('fusion')}</p>
     <div class="ladder">${node(0)}${node(1)}</div>
     <div class="tree">${branch('Fossil', 'var(--btc)', [2, 3])}${branch('Renewable', 'var(--hash)', [4, 5, 6, 21, 22])}${branch('Nuclear', 'var(--volt)', [7, 8])}</div>
-    <div class="card" style="padding:14px;display:flex;gap:14px;flex-wrap:wrap;box-shadow:inset 0 0 0 2px rgba(95,230,224,.5)">
-      <span class="thumb" style="width:120px;height:110px;display:flex;align-items:flex-end;justify-content:center;background:#2B3A22;border-radius:10px">${thumb('B_CORE', 108)}</span>
+    <div class="card" style="padding:14px;display:flex;gap:14px;flex-wrap:wrap;box-shadow:inset 0 0 0 2px var(--hash)">
+      <span class="thumb" style="width:120px;height:110px;display:flex;align-items:flex-end;justify-content:center;background:#fff;border-radius:14px">${thumb('B_CORE', 108)}</span>
       <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:8px"><span class="lbl" style="color:var(--hash)">game · The top of the tree</span><b class="px" style="color:var(--hash);font-size:18px">Free energy core</b>
       <span style="color:var(--muted);font-size:13px">∞ MW at $0. Costs ${money(u[159])} and one lucky roll; a failed roll keeps the core and makes the next one easier.</span>
       <div class="reqs">${req.map(([t, ok]) => `<div class="req ${ok ? 'ok' : ''}"><i>${ok ? ic('check') : ''}</i><span>${t}</span></div>`).join('')}</div></div></div>`, true);
@@ -2293,7 +2305,7 @@ $('#b-menu').onclick = () => {
 let pickDiff = 0, pickSeed = (Math.random() * 2 ** 32) >>> 0, pickSite = 0;
 try { pickSite = Math.min(5, Math.max(0, +(localStorage.getItem('pg-site') || 0))); } catch (_) {}
 function newRunScreen() {
-  running = running && false; ['#hud', '#pill', '#speed', '#dock', '#np', '#status'].forEach((s) => $(s).hidden = true); statusHtml = ''; $('#memo').hidden = true; memoResume = false; stopSpeaking(); closeInspector(); setTool(-1);
+  running = running && false; ['#hud', '#pill', '#speed', '#rail', '#layers', '#dock', '#np', '#status'].forEach((s) => $(s).hidden = true); statusHtml = ''; $('#memo').hidden = true; memoResume = false; stopSpeaking(); closeInspector(); setTool(-1);
   const has = !!localStorage.getItem('pg-save');
   E.set_site(pickSite); E.preview_seed(pickSeed); redraw = true; const u = UI();
   const tr = [['River', u[30] ? 'Yes: a dam is possible' : 'None: wind opens deep geothermal directly', u[30] ? 'var(--hash)' : 'var(--alarm)'],
@@ -2349,7 +2361,7 @@ function askTutorial() {
 }
 function afterStart() {
   try { seenTips = JSON.parse(localStorage.getItem('pg-tips') || '{}'); } catch (_) { seenTips = {}; }
-  ['#hud', '#pill', '#speed', '#dock'].forEach((s) => $(s).hidden = false);
+  ['#hud', '#pill', '#speed', '#rail', '#dock'].forEach((s) => $(s).hidden = false);
   hushed = {};
   overShown = false; shownEvent = -1; fit(); setSpeed(1); viewMask = 0; viewAuto = 0; applyView(); renderDock(); running = true;
 }
