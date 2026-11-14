@@ -568,6 +568,7 @@ unsafe fn fill_ui(gg: &Game, rr: &Renderer) {
         u[583] = gg.batt_mwh; u[584] = gg.batt_cap; u[585] = gg.batt_flow; u[586] = gg.feed_now;
         u[587] = gg.sell_on as u8 as f64; u[588] = gg.sell_floor; u[589] = gg.export_day; u[590] = gg.export_usd; u[591] = gg.export_mwh;
         u[592] = (!gg.st().flare) as u8 as f64; u[593] = gg.export_kw;
+        { let (hot, _) = gg.hot_boxes(); u[594] = hot as f64; u[595] = gg.blds.iter().filter(|b| is_miner(b.kind) && b.broken == 0).count() as f64; }
         u[502] = TECH_WAGE; u[503] = GUARD_WAGE; u[504] = TECH_SWAPS as f64; u[505] = CALLOUT_USD;
         u[510] = boxes as f64; u[511] = gg.parts_lost_th;
         u[512] = gg.site as f64; u[513] = gg.well_f; u[514] = (gg.st().dry && gg.dry_season()) as u8 as f64; u[515] = gg.grid_f();

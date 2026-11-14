@@ -1063,7 +1063,7 @@ impl Game {
             if b.off != 0 || econ[x] { continue; }
             if is_miner(b.kind) {
                 if b.broken != 0 { continue; }
-                let f = if throttle_ev || b.temp > 80.0 { 0.7 } else { 1.0 };
+                let f = if (throttle_ev && b.temp > 72.0) || b.temp > 80.0 { 0.7 } else { 1.0 }; // a throttle order only slows the boxes running hot
                 self.nets[b.net as usize].demand += k.kw * b.tune_kw() * b.parts_f() * f;
             } else if b.kind == K_FAN || b.kind == K_IMMERSION { self.nets[b.net as usize].demand += k.kw; }
         }
@@ -1173,7 +1173,7 @@ impl Game {
             if f <= 0.0 && b.broken == 0 && !grid_net.get(b.net as usize).copied().unwrap_or(false) { unpowered += 1; }
             if !is_miner(b.kind) || b.broken != 0 { continue; }
             let k = KINDS[b.kind as usize];
-            let thr = if throttle_ev || b.temp > 80.0 { 0.6 } else { 1.0 };
+            let thr = if (throttle_ev && b.temp > 72.0) || b.temp > 80.0 { 0.6 } else { 1.0 };
             let h0 = k.th * b.tune_th() * thr * f * (0.7 + 0.3 * b.health as f64 / 100.0);
             let h = h0 * b.parts_f(); lost += h0 - h;
             th += h; acc += h * (1.0 - b.reject());
@@ -1361,7 +1361,13 @@ impl Game {
     pub fn apply_event(&mut self, ev: i32) {
         self.roll = 1 + self.rng.below(20) as i32;
         match ev {
-            EV_HEATWAVE => { self.heat_days = 3; self.heat_add = 9.0; self.update_temps(); self.pending = ev; self.ev_arg = self.chiller_cost(); }
+            EV_HEATWAVE => {
+                self.heat_days = 3; self.heat_add = 9.0; self.update_temps();
+                // fans, immersion and greenhouses count: only boxes that would actually cook need chillers
+                let (hot, _) = self.hot_boxes();
+                if hot == 0 { let n = self.blds.iter().filter(|b| is_miner(b.kind) && b.broken == 0).count(); self.toast(T_HEAT_COOL, n as f64); }
+                else { self.pending = ev; self.ev_arg = self.chiller_cost(); }
+            }
             EV_GAS_SPIKE => { self.gas_days = 3; self.toast(T_EVENT, ev as f64); }
             EV_BROWNOUT => { self.brown_days = 1; self.toast(T_EVENT, ev as f64); }
             EV_PRICE_CRASH => { self.price *= 0.75; self.toast(T_EVENT, ev as f64); }
@@ -1428,9 +1434,22 @@ impl Game {
     /// Base running cost of a power source in $/MWh (the grid depends on your contract).
     pub fn usd_mwh(&self, kind: u8) -> f64 { if kind == K_GRID { self.grid_usd } else { KINDS[kind as usize].usd_mwh } }
 
+    /// Running miners over 80 °C right now, and the share of revenue they earn.
+    pub fn hot_boxes(&self) -> (u32, f64) {
+        let (mut hot, mut th_hot, mut th_all) = (0u32, 0.0, 0.0);
+        for b in self.blds.iter() {
+            if !is_miner(b.kind) || b.broken != 0 || b.off != 0 { continue; }
+            let th = KINDS[b.kind as usize].th * b.tune_th(); th_all += th;
+            if b.temp > 80.0 { hot += 1; th_hot += th; }
+        }
+        (hot, if th_all > 0.0 { th_hot / th_all } else { 0.0 })
+    }
     pub fn chiller_cost(&self) -> f64 {
-        // three days of rented chillers: roughly what throttling would cost you, so it's a real choice
-        fmax(400.0, self.rev_day * 0.9)
+        // three days of chillers for the boxes that run hot: roughly what throttling them would cost, so it's a real
+        // choice, and good cooling makes it cheap (or skips it)
+        let (hot, share) = self.hot_boxes();
+        if hot == 0 { return 0.0; }
+        fmax(120.0, self.rev_day * 0.9 * share)
     }
 
     pub fn choose(&mut self, c: u32) {
@@ -1442,7 +1461,9 @@ impl Game {
                     let r = 1 + self.rng.below(20) as i32; self.roll = r;
                     if r < 11 {
                         let mut hit = 0;
-                        for x in 0..self.blds.len() { if hit < 2 && is_miner(self.blds[x].kind) && self.blds[x].broken == 0 { self.blds[x].fire = 1; self.blds[x].health = fmin(self.blds[x].health as f64, 25.0) as f32; hit += 1; } }
+                        let mut by_heat: Vec<usize> = (0..self.blds.len()).filter(|&x| is_miner(self.blds[x].kind) && self.blds[x].broken == 0).collect();
+                        by_heat.sort_unstable_by(|a, b| self.blds[*b].temp.partial_cmp(&self.blds[*a].temp).unwrap_or(core::cmp::Ordering::Equal));
+                        for x in by_heat { if hit < 2 && self.blds[x].temp > 75.0 { self.blds[x].fire = 1; self.blds[x].health = fmin(self.blds[x].health as f64, 25.0) as f32; hit += 1; } }
                     } else { self.heat_add = 0.0; self.update_temps(); }
                 }
             },

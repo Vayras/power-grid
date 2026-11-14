@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-15.41';
+const BUILD = 'build 2026-11-15.42';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -766,6 +766,7 @@ function drainToasts(u) {
       case 45: toast('Contractor came out', `${money(arg)} for the call-out and parts. Spares on your shelf were used first.`, 'var(--muted)', 'parts', 'wrench'); break;
       case 46: toast('Tariff hike', `${u[512] === 0 ? 'Your supplier' : 'The utility'} raised what miners pay: now $${arg}/MWh.`, 'var(--alarm)', 'tariff', 'bolt'); sfx('bad'); break;
       case 47: toast(arg ? 'Dry season' : 'The rains are back', arg ? 'Rivers are low, so the state halves the power it sells to miners until the rains come.' : 'Rivers are full again. Your whole allocation is back.', arg ? 'var(--btc)' : 'var(--hash)', 'dry', 'drop'); break;
+      case 52: toast('Heatwave: your cooling held', `Three hot days, and all ${arg} running box${arg === 1 ? '' : 'es'} stay under 80 °C. No chillers needed. Packed or dusty boxes run hotter; fans and immersion keep them out of trouble.`, 'var(--hash)', 'heat', 'snow'); sfx('upgrade'); break;
       case 48: toast('No power market here', 'Spot and demand-response contracts need a real-time power market. Here you buy from one supplier at a fixed price.', 'var(--muted)', 'site'); sfx('bad'); break;
       case 49: toast('No more grid here', 'The utility allots a site four connections. For more power, climb the power tree and make your own.', 'var(--muted)', 'unlock'); sfx('bad'); break;
       case 51: toast('Sold bitcoin for the bills', `Cash ran out, so ${btcf(arg)} was sold at the market to pay them.`, 'var(--btc)', '', 'chart'); break;
@@ -2041,7 +2042,7 @@ function showEvent(id, u) {
   sfx('event');
   const roll = u[19], arg = u[20];
   let body = '', choices = [];
-  if (id === 0) { body = EVENTS[0].d; choices = [['Rent chillers', 'Keep full hashrate', '−' + money(arg), 'var(--cash)'], ['Throttle to 60%', "Free, but you'll mine less for 3 days", '−40% hash', 'var(--alarm)'], ['Gamble it', 'Roll a d20: 11+ and it passes, under 11 two boxes fry', '50/50', 'var(--btc)']]; }
+  if (id === 0) { const hot = u[594], all = u[595]; body = EVENTS[0].d + ` <b>${hot} of ${all} box${all === 1 ? '' : 'es'}</b> will run over 80 °C; your fans and immersion keep the rest cool.`; choices = [['Rent chillers', `For the ${hot} hot box${hot === 1 ? '' : 'es'}: full hashrate`, '−' + money(arg), 'var(--cash)'], ['Throttle the hot ones', `Free: those ${hot} run at 60% for 3 days, the cool ones don't`, '−40% on ' + hot, 'var(--alarm)'], ['Gamble it', 'Roll a d20: 11+ and it passes, under 11 the two hottest boxes fry', '50/50', 'var(--btc)']]; }
   else if (id === 6) { body = 'A safety inspector is walking the site with a clipboard.'; choices = [['Pay the fine', 'Clean and simple', '−' + money(arg), 'var(--alarm)'], ['Argue it', `Roll 14+ and they leave. Under 14 costs ${money(arg * 2.5)}`, '35%', 'var(--btc)']]; }
   else if (id === 13) {
     const kw = u[307], rate = arg / Math.max(kw / 1000 * 6, 1e-9), spot = u[305] * u[256];

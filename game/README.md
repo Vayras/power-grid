@@ -155,6 +155,9 @@ Upload `web/` to any static host. Make sure `.wasm` is served as `application/wa
   fixed, shaped by hour, gas, heat and brownouts, spikes in emergencies; boxes switch off at their own break-even
   or above a flat limit), or Fixed + demand response ($3/MWh standby credit, calls switch you off automatically).
   Any change runs at least 30 days.
+- **Heatwaves respect your cooling:** only boxes that would run over 80 °C need rented chillers (priced on their share
+  of revenue), a throttle order only slows those, and the gamble fries the two hottest. If everything stays cool, there's
+  no choice to make.
 - **Batteries and selling power (Power tab, opens with the grid maxed):** a battery bank (2 / 5 / 10 MWh, 500 kW / 1 /
   2 MW) fills from spare cheap power on its network (solar, wind, hydro, nuclear; not diesel or gas) and runs the boxes
   when that power is gone; 10% is lost going in and out. **Sell to the city** exports whatever any generator can still
