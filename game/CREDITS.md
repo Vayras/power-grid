@@ -4,6 +4,16 @@
 Every sprite the game ships (terrain, trees, buildings, people, the delivery truck) is an original voxel model in
 `tools/voxel/models.py`, rendered by `tools/voxel/vox.py`. No third-party art is in `web/atlas.png`.
 
+## Weather sounds (public domain / CC0)
+`web/audio/` holds seamless loops cut from these recordings (trimmed, crossfaded, loudness-normalized, re-encoded
+as AAC). None requires credit; they are listed for provenance.
+- `rain-light.m4a`: "Rain.ogg" by ジダネ, Wikimedia Commons, released into the public domain by its author.
+  https://commons.wikimedia.org/wiki/File:Rain.ogg
+- `rain-heavy.m4a`: "Rain (1).ogg" by ezwa (via PDSounds), Wikimedia Commons, released into the public domain by its author.
+  https://commons.wikimedia.org/wiki/File:Rain_(1).ogg
+- `wind.m4a`: "Wind in Tall Grass" (#0908) by Joseph Sardin, BigSoundBank, CC0 1.0.
+  https://bigsoundbank.com/wind-in-tall-grass-s0908.html
+
 ## Earlier pixel art (no longer shipped)
 The sections below credit the art used up to build .34. Its source sheets and the old builder (`tools/build_atlas.py`)
 are kept for reference only.

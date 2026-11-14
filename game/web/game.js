@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-14.36';
+const BUILD = 'build 2026-11-15.37';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -371,8 +371,21 @@ function sfx(kind) {
   } catch (_) {}
 }
 // Plant ambience: server-fan hiss + 50 Hz transformer hum that swell with the number of running boxes, and a fire crackle bed.
+// Weather beds are real recordings (public domain / CC0, see CREDITS.md), looped seamlessly. They load on the
+// first ambience tick after audio starts; until then (or if a file fails) the synthesized noise beds stand in.
+const WX_FILES = { rainL: 'audio/rain-light.m4a', rainH: 'audio/rain-heavy.m4a', wind: 'audio/wind.m4a' };
+let wxBufs = null;
+function loadWeather(a) {
+  wxBufs = {};
+  for (const k in WX_FILES) fetch(WX_FILES[k] + '?' + BUILD.slice(6)).then((r) => r.arrayBuffer()).then((b) => a.decodeAudioData(b)).then((buf) => {
+    const s = a.createBufferSource(); s.buffer = buf; s.loop = true;
+    s.loopStart = 0.03; s.loopEnd = buf.duration - 0.03;   // step over AAC priming/padding at the ends
+    const g = a.createGain(); g.gain.value = 0; s.connect(g).connect(a.destination);
+    s.start(0, Math.random() * buf.duration * 0.8); wxBufs[k] = g;
+  }).catch(() => {});
+}
 function ambience(u) {
-  if (!settings.sfx || !running || !actx) { if (amb) { ['hum', 'hiss', 'crk', 'rain', 'wind'].forEach((k) => amb[k].gain.setTargetAtTime(0, actx.currentTime, 0.3)); } return; }
+  if (!settings.sfx || !running || !actx) { if (amb) { ['hum', 'hiss', 'crk', 'rain', 'wind'].forEach((k) => amb[k].gain.setTargetAtTime(0, actx.currentTime, 0.3)); } if (wxBufs) for (const k in wxBufs) wxBufs[k].gain.setTargetAtTime(0, actx.currentTime, 0.4); return; }
   try {
     const a = actx;
     if (!amb) {
@@ -389,8 +402,14 @@ function ambience(u) {
     amb.crk.gain.setTargetAtTime(fires > 0 ? Math.min(0.09, 0.03 + fires * 0.02) * (0.6 + Math.random() * 0.8) : 0, a.currentTime, 0.08);
     if (fires > 0 && Math.random() < 0.25) sfx('fire');
     const wx = u[284];
-    amb.rain.gain.setTargetAtTime(wx === 1 ? 0.035 : wx === 2 ? 0.06 : 0, a.currentTime, 0.8);
-    amb.wind.gain.setTargetAtTime(wx === 3 ? 0.07 + Math.random() * 0.04 : wx === 2 ? 0.03 : 0, a.currentTime, 0.5);
+    if (!wxBufs) loadWeather(a);
+    const W = wxBufs || {}, quiet = run;
+    // weather 1 = rain, 2 = storm, 3 = wind. The recordings carry the bed; the noise only covers until they load.
+    if (W.rainL) W.rainL.gain.setTargetAtTime((wx === 1 ? 0.55 : wx === 2 ? 0.25 : 0) * quiet, a.currentTime, 1.2);
+    if (W.rainH) W.rainH.gain.setTargetAtTime((wx === 2 ? 0.7 : 0) * quiet, a.currentTime, 1.2);
+    if (W.wind) W.wind.gain.setTargetAtTime((wx === 3 ? 0.55 + Math.random() * 0.2 : wx === 2 ? 0.3 : 0) * quiet, a.currentTime, 1.5);
+    amb.rain.gain.setTargetAtTime(W.rainL || W.rainH ? 0 : wx === 1 ? 0.035 : wx === 2 ? 0.06 : 0, a.currentTime, 0.8);
+    amb.wind.gain.setTargetAtTime(W.wind ? 0 : wx === 3 ? 0.07 + Math.random() * 0.04 : wx === 2 ? 0.03 : 0, a.currentTime, 0.5);
     if (u[291] > amb.strikes) { setTimeout(() => sfx('thunder'), 150 + Math.random() * 500); } amb.strikes = u[291];
   } catch (_) {}
 }
