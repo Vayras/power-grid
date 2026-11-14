@@ -1,7 +1,7 @@
 # Power Grid
 
 A Bitcoin mining plant tycoon in the style of the old 2.5D tycoon games. Build power, mine blocks,
-survive difficulty retargets and halvings, and climb the power ladder to the free energy core.
+survive difficulty retargets and halvings, and grow a power tree to the free energy core.
 
 - **Rust + WebAssembly.** The whole game (seeded map generation, simulation, random events and
   a software pixel renderer) is one dependency-free Rust crate in `src/`, compiled to `wasm32-unknown-unknown`.
@@ -35,12 +35,12 @@ from the OpenGFX cut-outs in `../assets/sprites/opengfx` (override with `PG_SPRI
 
 ## Balance simulator
 
-`tools/sim` plays the real game core headless with a simple greedy bot and reports how fast runs reach gas:
+`tools/sim` plays the real game core headless with a simple greedy bot and reports how fast runs max their first branch node (gas):
 
 ```sh
 cd tools/sim
 cargo run --release -- 60 0 sim     # 60 runs, Normal, simulated market
-cargo run --release -- 60 1 live    # Hard, price held at today's
+cargo run --release -- 60 1 live    # Hard, live flag (same rules as sim after day 0)
 cargo run --release -- 1 0 sim v    # one run, verbose trace and cash ledger
 PG_USED=1 cargo run --release -- 60 0 sim   # bot buys used machines whenever any are listed
 PG_TUNE=1 cargo run --release -- 60 0 sim   # bot puts every box on its most profitable firmware profile
@@ -49,17 +49,20 @@ PG_PARTS=crew cargo run --release -- 200 0 sim  # parts: none (ignore), fix (con
 PG_POOL=2 cargo run --release -- 60 0 sim       # 0 big FPPS, 1 budget overseas, 2 PPLNS
 PG_HEAT=1 cargo run --release -- 60 0 sim       # bot builds greenhouses next to its boxes
 PG_CONTRACT=1 cargo run --release -- 60 0 sim   # 0 fixed, 1 spot (PG_CAP=<$/MWh> for a flat limit), 2 demand response
-cargo run --release -- 15 0 full     # play the whole ladder: the day each rung opens (PG_DAYS=4000, PG_SITE; add v for a trace)
-cargo run --release -- check         # rules that must hold whatever the balance: a map with no river can still pass hydro
+cargo run --release -- 15 0 full     # play the whole tree: the day each node opens (PG_DAYS=4000, PG_SITE; add v for a trace, live for the live flag)
+PG_BRANCH=fossil cargo run --release -- 15 0 full   # keep the bot to one route: fossil or renewable
+cargo run --release -- check         # rules that must hold whatever the balance: no-river maps, old saves, both roads to the core
 ```
 
-CI runs three checks on every push: at least half of Normal runs reach gas before the first halving (`sim`), the ladder
-rules hold (`check`), and at least half of 15 Normal runs climb the whole ladder and win (`full`).
+CI runs these checks on every push: at least half of Normal runs max a branch node before the first halving (`sim`),
+the tree rules hold (`check`), at least half of 15 Normal runs win (`full`), each branch wins on its own (`PG_BRANCH`),
+and at least a third of 10 Hard runs win.
 
 The `full` bot is a careful, unhurried player, not an expert: it grows while a box pays for itself, puts half its income
-aside for the next rung, trades old boxes in, keeps a guard and four signs but builds no walls. At build .27 it wins about
-24 of 30 Normal runs, the median around day 2,200 (the second halving, day ~1,975, is the earliest the core allows). It does
-not fence, so it does poorly on Hard and Brutal: those are not balanced against it yet.
+aside for the next node, trades old boxes in, keeps a guard and four signs but builds no walls. At build .32 (30 runs each):
+Normal wins 30/30, median day ~860 (fossil only ~1,070, renewable only ~1,000); Hard wins 29/30, median ~1,435;
+Brutal wins about 8/30, and most runs that don't win go bankrupt after the second halving. The first halving (day ~517)
+is the earliest the core allows.
 
 ## Save format
 
@@ -86,17 +89,23 @@ Upload `web/` to any static host. Make sure `.wasm` is served as `application/wa
 
 - Drag to pan, pinch or scroll to zoom, tap a building to inspect it.
 - Pick something in the build bar, then tap the map (on touch screens, tap again on **Place** to confirm).
-- Every power source upgrades to level 3. Maxing one unlocks the next rung:
-  grid → diesel → gas → coal → solar → wind → hydro → fission → deep geothermal → orbital solar → fusion →
-  **free energy core**. Everything up to fission is real; the rungs after it are marked "game" in the UI, and the
+- Every power source upgrades to level 3. Maxing one opens what grows from it on the **power tree**:
+  - the grid opens two branches: **fossil** (gas → coal) and **renewable** (solar → wind → hydro → deep geothermal → orbital solar);
+  - coal *or* wind opens **nuclear** (fission → fusion);
+  - fusion *or* orbital solar opens the **free energy core**;
+  - diesel is a backup genset you can build from the start. On a map with no river, wind opens deep geothermal directly.
+
+  Everything up to fission is real; deep geothermal, orbital solar and fusion are marked "game" in the UI, and the
   core's closing card explains why free energy wouldn't make mining free.
-- The core needs 2 halvings survived, fusion at level 3, ₿ 21 held, 2016 blocks with no power
-  shortage, $5M, and a d20 roll of 12 or more.
-- **Grid limit:** a site gets four grid hookups (4.8 MW). Past that you make your own power, which is what the ladder is for.
-  Rung prices are set so a steady player has wind around the first halving and fusion before the second.
+- The core needs a halving survived, fusion or orbital solar at level 3, ₿ 21 held, 2016 blocks with no power
+  shortage, $10M, and a d20 roll of 12 or more. A failed roll keeps the core: it tries again 10 days later, +4 on the roll each time.
+- **Grid limit:** a site gets four grid hookups (4.8 MW). Past that you make your own power, which is what the tree is for.
+- **Bills:** they're paid in cash. If cash runs out and you hold bitcoin, just enough is sold at the market to cover them.
+- **Live vs Simulated:** Live starts from today's real market (mempool.space) and plays it forward in the game; Simulated
+  starts from a fixed snapshot, so a seed always plays the same. The rules are the same after day 0.
 - **Milestones:** your backers pay out as hashrate comes online (10 PH/s up to 2 EH/s) and when you survive each halving:
-  $1,500 up to $250,000. The next one shows under the alerts. Not in replays.
-- **Skip ahead (the double arrow, or F):** top speed until an event, an alarm, a milestone, a new rung, or enough cash for the next rung.
+  $3,000 up to $250,000. The next one shows under the alerts. Not in replays.
+- **Skip ahead (the double arrow, or F):** top speed until an event, an alarm, a milestone, a new rung, or enough cash for the next step on the tree.
 - **Building:** the tool stays in hand until Esc or Done. With a mouse, drag a miner to lay a row.
 - Random events (heatwaves, gas spikes, brownouts, price swings, fires, inspectors, curtailment calls,
   fee spikes) hit most days on Hard. Unpaid bills for 3 days on Hard and the plant is repossessed.
@@ -143,7 +152,7 @@ Upload `web/` to any static host. Make sure `.wasm` is served as `application/wa
 src/lib.rs       exports to JS, allocator, UI mailbox
 src/game.rs      map generation, simulation, events, save/load
 src/render.rs    software renderer (isometric, pixel art)
-src/data.rs      building kinds, power ladder, events
+src/data.rs      building kinds, power tree, events
 src/sprites.rs   generated sprite table
 web/             index.html, style.css, game.js, game.wasm, atlas.png, sw.js, manifest
 tools/           atlas builder + sprite drawing code

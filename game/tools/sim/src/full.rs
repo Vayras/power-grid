@@ -1,5 +1,6 @@
 //! The long game. A bot that plays from the first box towards the free energy core and reports the day
-//! each rung of the power ladder opened, so the whole ladder can be balanced and not only its first rungs.
+//! each node of the power tree opened, so the whole tree can be balanced and not only its first nodes.
+//! PG_BRANCH=fossil or =renewable keeps the bot to one route (grid, fission, fusion and the core are shared).
 //!
 //! The bot is a sensible, unhurried player: it grows while a new box pays for itself, keeps a cash reserve,
 //! switches off boxes that cost more in power than they mine, adds the cheapest power it can use, and buys
@@ -45,10 +46,10 @@ fn find_spot(g: &Game, kind: u8) -> Option<(i32, i32)> {
     None
 }
 
-/// Power the bot plans around: sources that run all day. Diesel is a ladder rung, not a plan.
+/// Power the bot plans around: sources that run all day. Diesel is a backup, not a plan.
 fn firm(kind: u8) -> bool { is_power(kind) && kind != K_DIESEL && kind != K_SOLAR && kind != K_WIND && kind != K_CORE }
 fn usd(g: &Game, kind: u8) -> f64 {
-    match kind { K_GRID => g.usd_mwh(K_GRID), K_GAS => KINDS[kind as usize].usd_mwh * g.gas_f, K_COAL => KINDS[kind as usize].usd_mwh + if g.t_coal { 0.0 } else { 15.0 }, _ => KINDS[kind as usize].usd_mwh }
+    match kind { K_GRID => g.usd_mwh(K_GRID), K_GAS => KINDS[kind as usize].usd_mwh * g.gas_f, K_COAL => KINDS[kind as usize].usd_mwh + if g.t_coal { 0.0 } else { 8.0 }, _ => KINDS[kind as usize].usd_mwh }
 }
 /// (price, kW available today) per firm source, cheapest first.
 fn supply(g: &Game) -> Vec<(f64, f64)> {
@@ -73,11 +74,30 @@ fn value(g: &Game, kind: u8, usd_mwh: f64) -> f64 {
     profit(g, kind, usd_mwh, 1.0) * before + profit(g, kind, usd_mwh, 0.6).max(0.0) * (HORIZON - before)
 }
 
-/// The next step on the ladder: (cost, kind, building to upgrade or None to build one).
-fn next_step(g: &Game) -> Option<(f64, u8, Option<usize>)> {
-    let (c, k, up) = g.next_rung()?;
-    let at = if up { (0..g.blds.len()).filter(|&x| g.blds[x].kind == k).max_by_key(|&x| g.blds[x].level) } else { None };
-    Some((c, k, at))
+fn fossil(k: u8) -> bool { k == K_GAS || k == K_COAL }
+fn renewable(k: u8) -> bool { k == K_SOLAR || k == K_WIND || k == K_HYDRO || k == K_DEEPGEO || k == K_ORBITAL }
+/// Nodes the bot may climb through: everything, or one route when PG_BRANCH says so.
+fn allowed(k: u8) -> bool {
+    match std::env::var("PG_BRANCH").as_deref() { Ok("fossil") => !renewable(k), Ok("renewable") => !fossil(k) && k != K_FISSION && k != K_FUSION, _ => true }
+}
+/// The next step up the tree: (cost, kind, building to upgrade or None to build one). Without PG_BRANCH it is the
+/// game's own pick (the cheapest step that opens something new).
+fn next_step(g: &Game, no_room: &[u8]) -> Option<(f64, u8, Option<usize>)> {
+    let top = |k: u8| (0..g.blds.len()).filter(|&x| g.blds[x].kind == k).max_by_key(|&x| g.blds[x].level);
+    if std::env::var("PG_BRANCH").is_err() && no_room.is_empty() {
+        let (c, k, up) = g.next_rung()?;
+        return Some((c, k, if up { top(k) } else { None }));
+    }
+    let mut best: Option<(f64, u8, Option<usize>)> = None;
+    for &(node, _) in TREE.iter() {
+        if node == K_CORE || node == K_DIESEL || !g.tier_unlocked(node) || !allowed(node) || (no_room.contains(&node) && top(node).is_none()) { continue; }
+        if node == K_HYDRO && !g.t_river { continue; }
+        if !children(node).any(|c| !g.tier_unlocked(c) && allowed(c)) { continue; }
+        let st = match top(node) { None => Some((KINDS[node as usize].cost, node, None)), Some(x) => { let c = g.upgrade_cost(x); if c > 0.0 { Some((c, node, Some(x))) } else { None } } };
+        if let Some(st) = st { if best.map_or(true, |b| st.0 < b.0) { best = Some(st); } }
+    }
+    if best.is_none() && g.tier_unlocked(K_CORE) && !g.blds.iter().any(|b| b.kind == K_CORE) { return Some((KINDS[K_CORE as usize].cost, K_CORE, None)); }
+    best
 }
 
 /// The cheapest way to add firm power, counting a year or so of running it: (capex, kind, upgrade or build, $/MWh, kW added).
@@ -89,7 +109,7 @@ fn cheapest_power(g: &Game) -> Option<(f64, u8, Option<usize>, f64, f64)> {
         if s < bs { bs = s; *best = Some((capex, kind, at, p, kw)); }
     };
     for kind in 0..N_KINDS as u8 {
-        if !firm(kind) || !g.tier_unlocked(kind) { continue; }
+        if !firm(kind) || !g.tier_unlocked(kind) || !allowed(kind) { continue; }
         if kind == K_HYDRO && !g.t_river { continue; }
         let k = KINDS[kind as usize];
         if !(kind == K_GRID && g.blds.iter().filter(|b| b.kind == K_GRID).count() >= GRID_MAX) { consider(k.cost, k.cap_kw[0], kind, None, &mut best); }
@@ -126,11 +146,14 @@ fn spare_power(g: &Game) -> Option<f64> {
     sup.iter().find(|x| x.1 >= 62.0).map(|x| x.0)
 }
 
-pub fn run(seed: u32, diff: u32, site: u8, max_days: u64, verbose: bool) -> Full {
-    let mut g = Game::new_at(seed, diff, Market::fallback(), site);
+pub fn run(seed: u32, diff: u32, site: u8, max_days: u64, verbose: bool, live: bool) -> Full {
+    let mut m = Market::fallback(); m.live = live;
+    let mut g = Game::new_at(seed, diff, m, site);
     let mut out = Full { rung: [None; 12], won: None, bankrupt: None, end_day: 0, worth: 0.0, miners: 0, blocked: None };
     out.rung[0] = Some(0);
     let mut boxes_full = false;
+    // nodes the bot found no room for: it climbs another branch instead (a player would too)
+    let mut no_room: Vec<u8> = Vec::new();
     // money put aside for the next rung: half of what comes in while the plant is still growing well, all of it otherwise
     let mut fund = 0.0f64; let mut cash_last = g.cash;
     // what a day really made (bitcoin mined less every bill), and the safety margin a box must clear to stay on:
@@ -205,7 +228,7 @@ pub fn run(seed: u32, diff: u32, site: u8, max_days: u64, verbose: bool) -> Full
         g.toasts.clear();
 
         // the core itself
-        if g.tier_unlocked(K_CORE) && g.core_reqs().iter().all(|x| *x) && g.cash >= KINDS[K_CORE as usize].cost + reserve * 0.25 && g.block >= g.core_cooldown {
+        if g.tier_unlocked(K_CORE) && !g.blds.iter().any(|b| b.kind == K_CORE) && g.core_reqs().iter().all(|x| *x) && g.cash >= KINDS[K_CORE as usize].cost + reserve * 0.25 && g.block >= g.core_cooldown {
             if let Some((i, j)) = find_spot(&g, K_CORE) { g.place(K_CORE, i, j, 0); cash_last = g.cash; continue; }
         }
 
@@ -222,7 +245,7 @@ pub fn run(seed: u32, diff: u32, site: u8, max_days: u64, verbose: bool) -> Full
                 if gain > 2.0 * (g.new_price(top) - g.sell_value(x)).max(1.0) { strong = true; }
             }
         } }
-        let step = next_step(&g);
+        let step = next_step(&g, &no_room);
         let surplus = (g.cash - reserve).max(0.0);
         fund += if strong { 0.5 } else { 1.0 } * (g.cash - cash_last).max(0.0);
         if !strong { fund = surplus; }
@@ -231,7 +254,7 @@ pub fn run(seed: u32, diff: u32, site: u8, max_days: u64, verbose: bool) -> Full
         let hopeless = step.map_or(true, |x| x.0 > surplus + 400.0 * net.max(0.0));
         if hopeless { fund = 0.0; }
         if let Some((c, k, at)) = step { if fund >= c {
-            match at { Some(x) => g.upgrade(x), None => match find_spot(&g, k) { Some((i, j)) => { g.place(k, i, j, 0); } None => { out.blocked = Some(k); } } }
+            match at { Some(x) => g.upgrade(x), None => match find_spot(&g, k) { Some((i, j)) => { g.place(k, i, j, 0); } None => { out.blocked = Some(k); if !no_room.contains(&k) { no_room.push(k); } } } }
             fund = 0.0;
         } }
         if let Some(f) = dbg { if verbose && g.day >= f && g.day < f + 40 {
@@ -289,18 +312,18 @@ pub fn run(seed: u32, diff: u32, site: u8, max_days: u64, verbose: bool) -> Full
     out
 }
 
-const NAMES: [&str; 12] = ["grid", "diesel", "gas", "coal", "solar", "wind", "hydro", "fission", "deep geo", "orbital", "fusion", "core"];
+const NAMES: [&str; 12] = ["grid", "diesel", "gas", "coal", "solar", "wind", "hydro", "deep geo", "orbital", "fission", "fusion", "core"];
 
 /// Play `runs` seeds to `max_days` and print when each rung opened. Returns how many runs reached `rung`.
-pub fn report(runs: u32, diff: u32, site: u8, max_days: u64, verbose: bool) -> Vec<Full> {
+pub fn report(runs: u32, diff: u32, site: u8, max_days: u64, verbose: bool, live: bool) -> Vec<Full> {
     let first: u32 = std::env::var("PG_SEED").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let seeds: Vec<u32> = (first..first + runs).map(|s| 0xC0FFEE ^ s.wrapping_mul(2654435761u32)).collect();
-    let res: Vec<Full> = if verbose { seeds.iter().map(|s| { println!("seed {s:08X}"); run(*s, diff, site, max_days, true) }).collect() } else {
-        std::thread::scope(|sc| { let hs: Vec<_> = seeds.iter().map(|s| { let s = *s; sc.spawn(move || run(s, diff, site, max_days, false)) }).collect(); hs.into_iter().map(|h| h.join().unwrap()).collect() })
+    let res: Vec<Full> = if verbose { seeds.iter().map(|s| { println!("seed {s:08X}"); run(*s, diff, site, max_days, true, live) }).collect() } else {
+        std::thread::scope(|sc| { let hs: Vec<_> = seeds.iter().map(|s| { let s = *s; sc.spawn(move || run(s, diff, site, max_days, false, live)) }).collect(); hs.into_iter().map(|h| h.join().unwrap()).collect() })
     };
     if std::env::var("PG_EACH").is_ok() { for (n, r) in res.iter().enumerate() { println!("  seed {:>2}: rungs {} won {:?} bankrupt {:?} boxes {} worth {:.0}", first as usize + n, r.rung.iter().filter(|x| x.is_some()).count(), r.won, r.bankrupt, r.miners, r.worth); } }
-    println!("full ladder, diff {diff}, site {site}, {runs} runs of up to {max_days} days");
-    println!("  {:<10} {:>8} {:>10} {:>14}", "rung", "reached", "median day", "range");
+    println!("full tree, diff {diff}, site {site}, {} market, branch {}, {runs} runs of up to {max_days} days", if live { "live" } else { "sim" }, std::env::var("PG_BRANCH").unwrap_or("any".into()));
+    println!("  {:<10} {:>8} {:>10} {:>14}", "node", "reached", "median day", "range");
     for w in 1..12 {
         let mut d: Vec<u64> = res.iter().filter_map(|r| r.rung[w]).collect(); d.sort();
         if d.is_empty() { println!("  {:<10} {:>5}/{:<2} {:>10} {:>14}", NAMES[w], 0, runs, "-", "-"); continue; }
@@ -318,28 +341,46 @@ pub fn report(runs: u32, diff: u32, site: u8, max_days: u64, verbose: bool) -> V
     res
 }
 
-/// A map with no river must still be able to climb past hydro: maxing wind opens fission, and an old save
-/// that already has wind at level 3 is mended when it loads.
+/// A map with no river must still be able to climb past hydro: maxing wind opens deep geothermal and fission,
+/// and an old save that already has wind at level 3 is mended when it loads.
 pub fn check_no_river() -> bool {
+    let max = |g: &mut Game, k: u8| { g.unlock_tier(k); let (i, j) = find_spot(g, k).expect("room"); g.place(k, i, j, 0); let x = g.blds.len() - 1; g.upgrade(x); g.upgrade(x); };
     let mut seed = 1u32;
     let mut g = loop { let g = Game::new_at(seed, 0, Market::fallback(), 0); if !g.t_river { break g; } seed += 1; };
-    g.cash = 1.0e9; g.unlock_tier(K_WIND);
-    let (i, j) = find_spot(&g, K_WIND).expect("room for a turbine");
-    g.place(K_WIND, i, j, 0);
-    let x = g.blds.len() - 1;
-    g.upgrade(x); g.upgrade(x);
-    let live = g.tier_unlocked(K_FISSION);
-    // the same plant as an old build would have saved it: wind maxed, fission still locked
-    g.unlocked[K_FISSION as usize] = false;
+    g.cash = 1.0e9; max(&mut g, K_WIND);
+    let open = g.tier_unlocked(K_FISSION) && g.tier_unlocked(K_DEEPGEO) && !g.tier_unlocked(K_ORBITAL);
+    // the same plant as an older build would have saved it: wind maxed, the nodes after it still locked
+    g.unlocked[K_FISSION as usize] = false; g.unlocked_x = [false; 2];
     let mut buf = Vec::new(); g.save(&mut buf);
-    let mended = Game::load(&buf).map_or(false, |l| l.tier_unlocked(K_FISSION));
-    // and a river map keeps the full ladder: wind opens hydro only
+    let mended = Game::load(&buf).map_or(false, |l| l.tier_unlocked(K_FISSION) && l.tier_unlocked(K_DEEPGEO) && l.tier_unlocked(K_DIESEL));
+    // a river map: wind opens hydro and fission, not deep geothermal
     let mut seed = 1u32;
     let mut r = loop { let g = Game::new_at(seed, 0, Market::fallback(), 0); if g.t_river { break g; } seed += 1; };
-    r.cash = 1.0e9; r.unlock_tier(K_WIND);
-    let (i, j) = find_spot(&r, K_WIND).expect("room for a turbine");
-    r.place(K_WIND, i, j, 0); let x = r.blds.len() - 1; r.upgrade(x); r.upgrade(x);
-    let river_ok = r.tier_unlocked(K_HYDRO) && !r.tier_unlocked(K_FISSION);
-    println!("no-river ladder: wind 3 opens fission {live} | old save mended {mended} | river map unchanged {river_ok}");
-    live && mended && river_ok
+    r.cash = 1.0e9; max(&mut r, K_WIND);
+    let river_ok = r.tier_unlocked(K_HYDRO) && r.tier_unlocked(K_FISSION) && !r.tier_unlocked(K_DEEPGEO);
+    // either top node can carry the core; coal alone opens fission but not wind's children
+    let mut f = Game::new_at(1, 0, Market::fallback(), 0); f.cash = 1.0e9; max(&mut f, K_COAL);
+    let fossil_ok = f.tier_unlocked(K_FISSION) && !f.tier_unlocked(K_HYDRO) && !f.tier_unlocked(K_DEEPGEO);
+    let mut o = Game::new_at(1, 0, Market::fallback(), 0); o.cash = 1.0e9; max(&mut o, K_ORBITAL);
+    let orbital_ok = o.tier_unlocked(K_CORE) && o.core_reqs()[1];
+    // bills: a wallet with bitcoin in it is never repossessed for want of cash
+    let mut b = Game::new_at(3, 2, Market::fallback(), 0); b.cash = -500.0; b.btc = 1.0;
+    let d = b.day; while b.day == d { if b.pending != EV_NONE { b.choose(0); } b.step_block(); }
+    let sold_ok = b.cash >= 0.0 && b.unpaid_days == 0 && b.btc < 1.0 && b.btc > 0.9;
+    // the core: a failed roll keeps it standing, and it tries again with a bonus
+    let mut core_ok = false;
+    for seed in 1..60u32 {
+        let mut c = Game::new_at(seed, 0, Market::fallback(), 0); c.cash = 1.0e9; max(&mut c, K_ORBITAL); c.unlock_tier(K_CORE);
+        c.halvings = 1; c.btc = 30.0; c.streak = 5_000;
+        let Some((i, j)) = find_spot(&c, K_CORE) else { continue };
+        c.place(K_CORE, i, j, 0); c.choose(0);
+        if c.over == 0 {
+            let kept = c.blds.iter().any(|x| x.kind == K_CORE) && c.core_bonus() == CORE_TRY_BONUS as i32;
+            let until = c.core_cooldown; while c.block < until + 2 * BLOCKS_PER_DAY && c.pending != EV_CORE_TRIAL { if c.pending != EV_NONE { c.choose(0); } c.streak = 5_000; c.step_block(); }
+            core_ok = kept && c.pending == EV_CORE_TRIAL; break;
+        }
+    }
+    println!("bills paid from bitcoin {sold_ok} | failed core stays and retries {core_ok}");
+    println!("tree: no-river wind opens deep geo + fission {open} | old save mended {mended} | river map {river_ok} | coal opens fission {fossil_ok} | orbital opens core {orbital_ok}");
+    open && mended && river_ok && fossil_ok && orbital_ok && sold_ok && core_ok
 }

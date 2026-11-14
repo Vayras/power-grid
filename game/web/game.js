@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-13.31';
+const BUILD = 'build 2026-11-14.32';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -8,14 +8,14 @@ const el = (tag, attrs = {}, html = '') => { const e = document.createElement(ta
 // ------------------------------------------------------------------ data (mirrors src/data.rs)
 const KINDS = [
   { name: 'Grid hookup', tab: 'power', spr: 'B_GRID', desc: 'Utility power on a fixed contract. Up to 4 per site. Brownouts and curtailment calls happen.' },
-  { name: 'Diesel genset', tab: 'power', spr: 'B_DIESEL', desc: '$240/MWh, fuel price swings' },
-  { name: 'Gas peaker', tab: 'power', spr: 'B_GAS', desc: '$60/MWh × gas price' },
-  { name: 'Coal station', tab: 'power', spr: 'B_COAL', desc: '$45/MWh, inspectors' },
-  { name: 'Solar field', tab: 'power', spr: 'B_SOLAR', desc: 'Free, daytime only' },
-  { name: 'Wind turbine', tab: 'power', spr: 'B_WIND0', desc: 'Free, random gusts' },
-  { name: 'Hydro dam', tab: 'power', spr: 'B_HYDRO', desc: 'Must touch water, $10/MWh' },
-  { name: 'Fission reactor', tab: 'power', spr: 'B_FISSION', desc: '$28/MWh, huge output' },
-  { name: 'Fusion tokamak', tab: 'power', spr: 'B_FUSION', desc: 'Game: no fusion plant sells power yet. $8/MWh, gigawatts', game: true },
+  { name: 'Diesel genset', tab: 'power', spr: 'B_DIESEL', desc: 'Backup power, open from the start. $150/MWh, fuel price swings' },
+  { name: 'Gas peaker', tab: 'power', spr: 'B_GAS', desc: 'Fossil branch. $32/MWh × gas price' },
+  { name: 'Coal station', tab: 'power', spr: 'B_COAL', desc: 'Fossil branch. $24/MWh, inspectors' },
+  { name: 'Solar field', tab: 'power', spr: 'B_SOLAR', desc: 'Renewable branch. Free, daytime only' },
+  { name: 'Wind turbine', tab: 'power', spr: 'B_WIND0', desc: 'Renewable branch. Free, random gusts' },
+  { name: 'Hydro dam', tab: 'power', spr: 'B_HYDRO', desc: 'Must touch water. $6/MWh, steady' },
+  { name: 'Fission reactor', tab: 'power', spr: 'B_FISSION', desc: 'Nuclear. $12/MWh, huge output' },
+  { name: 'Fusion tokamak', tab: 'power', spr: 'B_FUSION', desc: 'Game: no fusion plant sells power yet. $3/MWh, half a gigawatt', game: true },
   { name: 'Free energy core', tab: 'power', spr: 'B_CORE', desc: 'Game: impossible. ∞ MW at $0. Ends the game', game: true },
   { name: '10× Antminer S19j Pro', tab: 'miners', spr: 'B_MINER1', desc: '1.04 PH/s · 30.7 kW · 29.5 J/TH' },
   { name: '10× Antminer S19 XP', tab: 'miners', spr: 'B_MINER2', desc: '1.41 PH/s · 30.1 kW · 21.3 J/TH' },
@@ -30,21 +30,25 @@ const KINDS = [
   { name: 'Greenhouse', tab: 'cooling', spr: 'B_GREENHOUSE', desc: 'Buys the heat of boxes within 2 tiles, up to 200 kW. They run 6 °C cooler.' },
 ];
 const CLEAR = 100;
-KINDS[21] = { name: 'Deep geothermal', tab: 'power', spr: 'B_DEEPGEO', desc: 'Game: wells 15 km down to superhot rock. $6/MWh, steady', game: true };
+KINDS[21] = { name: 'Deep geothermal', tab: 'power', spr: 'B_DEEPGEO', desc: 'Game: wells 15 km down to superhot rock. $4/MWh, steady', game: true };
 KINDS[22] = { name: 'Orbital solar', tab: 'power', spr: 'B_ORBITAL', desc: 'Game: sunlight beamed down from orbit, day and night. Free', game: true };
-// The ladder's order: maxing one unlocks the next (same as LADDER in data.rs).
-const LADDER = [0, 1, 2, 3, 4, 5, 6, 7, 21, 22, 8, 9];
-// A map with no river can't build a dam, so the ladder steps over hydro there (UI()[30] = this site has a river).
+// The power tree (same as TREE in data.rs): node -> parents; maxing ANY parent opens the node.
+// Diesel is open from the start. Fossil: gas, coal. Renewable: solar, wind, hydro, deep geo, orbital. Nuclear opens from coal or wind.
+const TREE = { 0: [], 1: [], 2: [0], 3: [2], 4: [0], 5: [4], 6: [5], 21: [6], 22: [21], 7: [3, 5], 8: [7], 9: [8, 22] };
+// The display order of the power tab: branch by branch, the core last.
+const LADDER = [0, 1, 2, 3, 4, 5, 6, 21, 22, 7, 8, 9];
+// A map with no river can't build a dam, so wind opens hydro's children there (UI()[30] = this site has a river).
 const noRiver = () => !UI()[30];
-const prevTier = (k) => { const p = LADDER[LADDER.indexOf(k) - 1]; return p === 6 && noRiver() ? 5 : p; };
-const nextTier = (k) => { const n = LADDER[LADDER.indexOf(k) + 1]; return n === 6 && noRiver() ? 7 : n; };
+const parentsOf = (k) => (TREE[k] || []).flatMap((p) => (p === 6 && noRiver() ? [5] : [p]));
+const childrenOf = (k) => Object.keys(TREE).map(Number).filter((c) => TREE[c].includes(k)).flatMap((c) => (c === 6 && noRiver() ? childrenOf(6) : [c]));
+const nameList = (ks) => ks.map((k) => KINDS[k].name.toLowerCase()).join(' or ');
 const isPow = (k) => k <= 9 || k === 21 || k === 22;
 const CLEAR_ITEM = { name: 'Clear land', tab: 'site', spr: 'TREE_0', desc: 'Drag to remove trees ($150) and rubble ($250)' };
 const kindOf = (k) => (k === CLEAR ? CLEAR_ITEM : KINDS[k]);
 const isMiner = (k) => k >= 10 && k <= 13;
 const PAINT = (k) => k === 18 || k === CLEAR;
-const CAP = [[250, 600, 1200], [500, 1000, 2000], [2000, 5000, 10000], [10000, 20000, 40000], [5000, 12000, 25000], [6000, 12000, 20000], [20000, 40000, 80000], [50000, 100000, 150000], [200000, 350000, 500000], [Infinity, Infinity, Infinity]];
-const UNLOCK_HINT = { 12: 'Unlocks with diesel', 13: 'Unlocks with gas', 15: 'Unlocks with coal' };
+const CAP = [[250, 600, 1200], [500, 1000, 2000], [2000, 5000, 10000], [10000, 20000, 40000], [5000, 12000, 25000], [8000, 16000, 30000], [20000, 40000, 80000], [50000, 100000, 150000], [200000, 350000, 500000], [Infinity, Infinity, Infinity]];
+const UNLOCK_HINT = { 12: 'Max out the grid hookup', 13: 'Max out gas or solar', 15: 'Max out gas or solar' };
 CAP[21] = [80000, 120000, 160000]; CAP[22] = [120000, 200000, 300000];
 const DIRN = ['→ south-east', '↓ south-west', '← north-west', '↑ north-east'];
 const EVENTS = {
@@ -64,11 +68,11 @@ const EVENTS = {
   13: { t: 'Curtailment call', c: 'var(--volt)', d: 'The grid is short and power prices are spiking.' },
   14: { t: 'Fee spike', c: 'var(--btc)', d: 'The mempool is jammed and transaction fees jumped.' },
 };
-const GRID_USD = [35, 45, 55], START_CASH = [80000, 60000, 50000];
+const GRID_EXTRA = [0, 8, 12], START_CASH = [100000, 75000, 60000];
 const DIFFS = [
-  ['Normal', '$80k to start, the site\'s usual power price. Early bailouts from the Foreman. 7 unpaid days before bankruptcy.'],
-  ['Hard', '$60k, power $10/MWh dearer than the site\'s usual price. No bailouts, a random event most shifts. 3 unpaid days.'],
-  ['Brutal', '$50k, power $20/MWh dearer. Wild prices, events nearly every other day, 1 unpaid day and you are out.'],
+  ['Normal', '$100k to start, the site\'s usual power price. Early bailouts from the Foreman. 7 unpaid days before bankruptcy.'],
+  ['Hard', '$75k, power $8/MWh dearer than the site\'s usual price. Difficulty climbs faster. No bailouts, more events. 5 unpaid days.'],
+  ['Brutal', '$60k, power $12/MWh dearer. Wild prices, the fastest difficulty, events nearly every other day. 3 unpaid days.'],
 ];
 
 // ------------------------------------------------------------------ formatting
@@ -487,8 +491,8 @@ function renderDock() {
     if (idx === 20) sub = k.desc + `<br><span class="dim">Heat sells for $${u[390].toFixed(1)}/MWh today${u[394] ? ` · yours: ${money(u[392])}/day` : ''}</span>`;
     if (isMiner(idx)) { const ec = econ(idx, u); sub = k.desc + `<br><b style="color:${ec.profit > 0 ? 'var(--cash)' : 'var(--alarm)'}">${ec.profit > 0 ? '+' : '−'}${money(Math.abs(ec.profit))}/day</b> · ${ec.profit > 0 ? 'pays back in ' + days(ec.payback) : 'loses money at $' + Math.round(ec.pp) + '/MWh'}<br><span class="dim">${u[330 + idx - 10] > 0 ? `Used ${money(u[326 + idx - 10])} · ${u[330 + idx - 10]} for sale` : 'No used ones for sale'} · real ≈ ${money(u[308 + idx - 10])}</span>`; }
     b.innerHTML = `<span class="thumb">${thumb(k.spr, innerWidth < 720 ? 44 : 52)}</span><span class="n">${k.name}</span><span class="s">${sub}</span>` +
-      (unlocked ? `<span class="c">${idx === CLEAR ? 'from $150' : money(cost)}</span>` : `<span class="lockt">${ic('lock')} ${isPow(idx) ? 'Max out ' + KINDS[prevTier(idx)].name.toLowerCase() : UNLOCK_HINT[idx] || ''}</span>`);
-    b.onclick = () => { if (!unlocked) { sfx('bad'); toast('Locked', isPow(idx) ? `Upgrade a ${KINDS[prevTier(idx)].name.toLowerCase()} to level 3 first.` : UNLOCK_HINT[idx] + '.', 'var(--muted)'); return; } setTool(tool === idx ? -1 : idx); };
+      (unlocked ? `<span class="c">${idx === CLEAR ? 'from $150' : money(cost)}</span>` : `<span class="lockt">${ic('lock')} ${isPow(idx) ? 'Max out ' + nameList(parentsOf(idx)) : UNLOCK_HINT[idx] || ''}</span>`);
+    b.onclick = () => { if (!unlocked) { sfx('bad'); toast('Locked', isPow(idx) ? `Upgrade a ${nameList(parentsOf(idx))} to level 3 first.` : UNLOCK_HINT[idx] + '.', 'var(--muted)'); return; } setTool(tool === idx ? -1 : idx); };
     box.appendChild(b);
   });
   syncDockH();
@@ -579,7 +583,7 @@ function renderInspector(force) {
       <div class="row"><span>Running cost</span><b>${kind === 0 && u[346] === 1 ? `$${Math.round(u[347])}/MWh spot` : u[94] ? '$' + u[94] + '/MWh' : 'free'}</b></div>
       ${kind === 0 ? `<div class="row"><span>Contract</span><button class="btn mini" data-a="contract">${CONTRACTS[u[346]].t}</button></div>` : ''}
       ${netRows(u)}
-      ${lvl === 2 && kind !== 8 && kind !== 9 ? `<div class="row" style="font-size:12px;color:var(--hash)"><span>Level 3 unlocks ${KINDS[nextTier(kind)].name.toLowerCase()}.</span></div>` : ''}
+      ${lvl === 2 && childrenOf(kind).length ? `<div class="row" style="font-size:12px;color:var(--hash)"><span>Level 3 unlocks ${childrenOf(kind).map((c) => KINDS[c].name.toLowerCase()).join(' and ')}.</span></div>` : ''}
       ${k.game ? `<div class="row" style="font-size:12px"><span>Not real: this rung is the game's. ${whyBtn(kind === 21 ? 'deepgeo' : kind === 22 ? 'orbital' : kind === 8 ? 'fusion' : 'site')}</span></div>` : ''}
       <div class="acts">${u[88] > 0 ? `<button class="btn btn-p big" data-a="up">${ic('up')}Upgrade to level ${lvl + 1} · ${money(u[88])}</button>` : kind !== 9 ? '<span class="tag" style="color:var(--hash)">Max level</span>' : ''}${kind !== 9 ? sell('Sell') : ''}</div>`;
   } else if (kind === 14) {
@@ -660,15 +664,15 @@ function drainToasts(u) {
       case 1: toast('Difficulty retarget', `Network difficulty ${arg >= 0 ? '+' : ''}${(arg * 100).toFixed(1)}%. ${arg > 0 ? 'Each miner now earns less.' : 'Your miners earn a bit more.'}`, arg > 0 ? 'var(--alarm)' : 'var(--cash)', 'retarget', 'gauge'); tip('retarget'); break;
       case 2: toast('Foreman bailout', `The Foreman covered you with ${money(arg)}. Don't make it a habit.`, 'var(--cash)', 'bailout', ''); break;
       case 3: toast('Unpaid bills', arg > 0 ? `${arg} more day${arg === 1 ? '' : 's'} in the red and the plant is repossessed.` : 'Out of time.', 'var(--alarm)', 'unpaid', ''); sfx('bad'); break;
-      case 4: sfx('upgrade'); toast('New power source', `${KINDS[arg].name} unlocked on the ladder.`, 'var(--hash)', 'unlock', 'up'); sfx('coin'); renderDock(); tip('ladder'); break;
+      case 4: sfx('upgrade'); toast('New power source', `${KINDS[arg].name} unlocked on the power tree.`, 'var(--hash)', 'unlock', 'up'); sfx('coin'); renderDock(); tip('ladder'); break;
       case 5: sfx('bad'); toast('Miner died', 'A box ran out of health. Repair it, or sell it to a broker for parts.', 'var(--alarm)', 'dead', 'x'); tip('heat'); break;
       case 6: { const ev = EVENTS[arg]; toast('Random event · ' + ev.t, ev.d, ev.c, 'event', ''); sfx('event'); break; }
       case 7: toast('Not enough cash', 'Sell some ₿ or wait for income.', 'var(--alarm)'); sfx('bad'); break;
       case 8: toast("Can't build there", 'Needs open land: no water, buildings or pads.', 'var(--alarm)'); sfx('bad'); break;
       case 9: toast('Locked', 'Max out the previous power source first.', 'var(--muted)'); break;
       case 10: toast('Needs water', 'A dam has to touch a lake tile.', 'var(--alarm)'); sfx('bad'); break;
-      case 11: toast('Not yet', 'The free energy core needs every requirement on the ladder.', 'var(--alarm)'); break;
-      case 12: toast('Core collapsed', `Rolled ${arg}. The field destabilised. Try again in 30 days.`, 'var(--alarm)'); break;
+      case 11: toast('Not yet', 'The free energy core needs every requirement on the power tree.', 'var(--alarm)'); break;
+      case 12: toast('Core held for a moment', `Rolled ${arg}. The field destabilised, but the core is still standing. It tries again in 10 days, +4 on the roll.`, 'var(--alarm)'); break;
       case 14: sfx('buzz'); toast('Power shortage', `Short ${power(arg)}. Everything on that network slows down and brownouts wear PSUs.`, 'var(--alarm)', 'shortage', 'bolt'); tip('power'); break;
       case 15: toast('Repaired', 'Back online.', 'var(--cash)'); break;
       case 16: toast('Sold bitcoin', `+${money(arg)} cash.`, 'var(--cash)'); sfx('cash'); break;
@@ -703,7 +707,8 @@ function drainToasts(u) {
       case 46: toast('Tariff hike', `${u[512] === 0 ? 'Your supplier' : 'The utility'} raised what miners pay: now $${arg}/MWh.`, 'var(--alarm)', 'tariff', 'bolt'); sfx('bad'); break;
       case 47: toast(arg ? 'Dry season' : 'The rains are back', arg ? 'Rivers are low, so the state halves the power it sells to miners until the rains come.' : 'Rivers are full again. Your whole allocation is back.', arg ? 'var(--btc)' : 'var(--hash)', 'dry', 'drop'); break;
       case 48: toast('No power market here', 'Spot and demand-response contracts need a real-time power market. Here you buy from one supplier at a fixed price.', 'var(--muted)', 'site'); sfx('bad'); break;
-      case 49: toast('No more grid here', 'The utility allots a site four connections. For more power, climb the ladder and make your own.', 'var(--muted)', 'unlock'); sfx('bad'); break;
+      case 49: toast('No more grid here', 'The utility allots a site four connections. For more power, climb the power tree and make your own.', 'var(--muted)', 'unlock'); sfx('bad'); break;
+      case 51: toast('Sold bitcoin for the bills', `Cash ran out, so ${btcf(arg)} was sold at the market to pay them.`, 'var(--btc)', '', 'chart'); break;
       case 50: { const what = E.milestone_info(arg, 0), target = E.milestone_info(arg, 1); toast('Milestone reached', `${what ? (target > 1 ? 'Second' : 'First') + ' halving survived' : hash(target) + ' switched on'}. Your backers release <b>${money(E.milestone_info(arg, 2))}</b>.`, 'var(--cash)', '', 'check'); sfx('coin'); stopSkip(false); break; }
       case 34: toast('Fees back to normal', 'The mempool cleared. Blocks pay the usual fees again.', 'var(--muted)'); break;
     }
@@ -730,7 +735,7 @@ const SITES_UI = [
     game: 'In the dry season (roughly November to March) your grid allocation is halved. Little crime and few events, but very remote: contractors cost 80% more.' },
   { key: 'dakota', t: 'North Dakota', short: 'N. Dakota', power: '$20/MWh flare gas', climate: '−9–21 °C', risks: 'The well declines, no market',
     real: 'Oil wells in North Dakota\'s Bakken produce gas that often can\'t reach a pipeline, so it\'s burned in a flare. Companies put generators and mining containers at the well and turn that gas into power instead, cutting waste and emissions. The catch: a shale well\'s output falls fast, so the mining moves on.',
-    game: 'The cheapest power in the game, from a genset on the well. Its output falls about 0.3% a day, so the site shrinks unless you climb the ladder. No market and no curtailment calls; contractors cost double.' },
+    game: 'The cheapest power in the game, from a genset on the well. Its output falls about 0.3% a day, so the site shrinks unless you climb the power tree. No market and no curtailment calls; contractors cost double.' },
 ];
 const GRID_KIND = { ...KINDS[0] };
 // The grid hookup is a flare-gas genset at the well, and a state utility line elsewhere.
@@ -747,7 +752,7 @@ function openSites() {
     </tbody></table>
     ${n > 1 ? `<div class="rows"><div class="row tot"><span>All sites, per day</span><b class="num">${total < 0 ? '−' : '+'}${money(Math.abs(total))}</b></div></div>` : ''}
     <h3>Open a new site · ${money(u[564])}</h3>
-    <p class="note">Land, permits and a connection. It starts like your first: a hookup, a shed and one box, on its own map, with its own power, weather and risks. Your ladder progress comes with you.</p>
+    <p class="note">Land, permits and a connection. It starts like your first: a hookup, a shed and one box, on its own map, with its own power, weather and risks. Your power tree progress comes with you.</p>
     <div class="diffs sites">${SITES_UI.map((st, i) => have.has(i) ? '' : `<button class="btn" data-open="${i}" ${u[0] < u[564] ? 'disabled' : ''}><span class="px" style="font-size:13px">${st.t}</span><small>${st.power} · ${st.climate}</small><small class="risk">${st.risks}</small></button>`).join('')}</div>`, true);
   const m = $('#modal'); m.classList.add('wide');
   m.querySelector('[data-x]').onclick = closeModal;
@@ -780,7 +785,7 @@ function stepsHtml(u) {
   let changed = false; for (const [id, , ok] of STEPS) if (!steps[id] && ok(u)) { steps[id] = 1; changed = true; }
   if (changed) saveSteps();
   const done = STEPS.filter(([id]) => steps[id]).length;
-  if (done === STEPS.length) { if (!steps.cheered) { steps.cheered = 1; steps.off = 1; saveSteps(); setTimeout(() => toast('First steps done', 'That\'s the loop: mine, pay for power, grow, climb the ladder. The rest is up to you.', 'var(--cash)', '', 'check'), 50); } return ''; }
+  if (done === STEPS.length) { if (!steps.cheered) { steps.cheered = 1; steps.off = 1; saveSteps(); setTimeout(() => toast('First steps done', 'That\'s the loop: mine, pay for power, grow, climb the power tree. The rest is up to you.', 'var(--cash)', '', 'check'), 50); } return ''; }
   return `<div class="steps"><div class="sh"><b>First steps</b><span class="dim">${done} of ${STEPS.length}</span><button class="ib mini" data-s="steps-x" aria-label="Hide first steps">${ic('x')}</button></div>` +
     STEPS.map(([id, t]) => `<div class="stp ${steps[id] ? 'done' : ''}">${ic(steps[id] ? 'check' : 'pause')}<span>${t}</span></div>`).join('') + '</div>';
 }
@@ -804,9 +809,9 @@ const TIPS = {
   used: "Used boxes are cheap for a reason: somebody ran them hard. They come at half to four-fifths health, slower and dusty. Service them and they're as good as new.",
   start: "Kid, that grey box is your first miner. It turns electricity into guesses at the next block. Drag to look around, tap things to inspect them.",
   hashrate: "Top left: cash, your bitcoin, and net per day. If net goes red, you're paying more for power than you mine. Tap ₿ to sell some.",
-  grow: "Your grid hookup gives 250 kilowatts. One container of S19s pulls about 31. To get more, tap the hookup and press Upgrade. Level 3 unlocks diesel. That's the ladder.",
+  grow: "Your grid hookup gives 250 kilowatts. One container of S19s pulls about 31. To get more, tap the hookup and press Upgrade. Level 3 opens gas and solar, the two branches of the power tree.",
   power: "Power shortage. The bar up top has two fixes: switch off your worst boxes, or upgrade a power source. Don't leave it short: brownouts wear out power supplies.",
-  upgrade: "That's the upgrade card. Each level adds capacity. Level 3 unlocks the next rung of the ladder.",
+  upgrade: "That's the upgrade card. Each level adds capacity. Level 3 unlocks what comes next on the power tree.",
   pole: "Power only flows through things that touch, or through poles. A pole reaches 4 tiles. Turn on the Grid view to see which boxes are on which network.",
   fan: "Fans blow one way, 4 tiles deep. Press R or the turn button to aim them. Turn on Airflow to see the wind.",
   fence: "Drag to lay walls. Raiders walk in from the edge of the map. If they can reach a box, it's at risk. Close the loop, then upgrade: wood, stone, steel. Security view shows red for exposed.",
@@ -817,7 +822,7 @@ const TIPS = {
   raid: "We got raided. Draw a fence all the way round. One gap and they walk in.",
   retarget: "That was a retarget. Every 2016 blocks the network adjusts difficulty to keep blocks 10 minutes apart. More miners out there means less ₿ for you.",
   heat: "Packed boxes heat each other. They glow orange from 70, red past 85, and can catch fire past 95. Space them out, aim fans at them, or switch some off.",
-  ladder: "New rung on the ladder. Cheaper power means older miners stay profitable longer. Climb to fusion, then the core.",
+  ladder: "New power source. Cheaper power means older miners stay profitable longer. Fossil or renewable, both roads lead to the core: through fusion, or through orbital solar.",
   fees: "Fee spike. People are bidding to get their transactions into the next block, and the winner of each block keeps the fees. After every halving, fees are a bigger part of what we earn.",
   curtail: "Curtailment. When the grid's short, it pays big users to switch off. Sometimes that's worth more than mining the power. Real Texas miners live on deals like this.",
   ledger: "New card in your ledger. Each one is a real piece of how mining works. Tap the book up top to read it.",
@@ -903,15 +908,15 @@ const GOALS = [
   { id: 'fees', ch: 'Network', t: 'Fee market', goal: 'Mine through a fee spike.', ok: (u) => u[304] >= 1,
     real: 'Users bid fees (in sats per vbyte) to get into the next block, and the miner keeps them on top of the subsidy. When the mempool jams, fees spike. Block 840,000, the 2024 halving block, paid about 37.6 BTC in fees: twelve times its 3.125 BTC subsidy.',
     game: 'Normal fees follow mempool.space\'s daily average. Spikes are random events, plus one after every halving.' },
-  { id: 'ladder', ch: 'Operations', t: 'Cheaper power', goal: 'Max out a power source and unlock the next.', ok: (u) => u[51] > 0,
+  { id: 'ladder', ch: 'Operations', t: 'Cheaper power', goal: 'Max out a power source and unlock the next.', ok: (u) => u[52] > 0 || u[54] > 0,
     real: 'Power is most of a miner\'s running cost. Real miners chase power under about $40/MWh: long-term contracts, stranded hydro, flared gas at oil wells, and sites that sell power back to the grid.',
-    game: 'The power ladder is game-sized: plant prices, outputs and the upgrade path are made up so they fit on one map.' },
+    game: 'The power tree is game-sized: plant prices, outputs and the upgrade paths are made up so they fit on one map.' },
   { id: 'solo', ch: 'Economics', t: 'Lottery ticket', goal: 'Find a block mining solo.', ok: (u) => u[295] >= 1,
     real: 'Solo mining has the same expected income as a pool, without the fee, but it arrives all at once or never. Every so often a hobbyist with a few TH/s wins a whole block; most never do.',
     game: 'Your odds each block are your real share of the network\'s hashrate.' },
   { id: 'gas', ch: 'Endgame', t: 'Gas turbines', goal: 'Unlock the gas peaker.', ok: (u) => u[52] > 0,
     real: 'Natural gas powers a lot of real mining. Some sites sit at oil wells and burn gas that would otherwise be flared, turning waste into hashrate. Gas prices swing, so margins do too.',
-    game: 'The gas peaker costs $60/MWh times a gas price that drifts day to day, with occasional spikes.' },
+    game: 'The gas peaker costs $32/MWh times a gas price that drifts day to day, with occasional spikes. It opens the fossil branch.' },
   { id: 'halving', ch: 'Endgame', t: 'The halving', goal: 'Survive a halving.', ok: (u) => u[14] >= 1,
     real: 'Every 210,000 blocks the subsidy halves: 50, 25, 12.5, 6.25, then 3.125 BTC in April 2024. The next cut, to 1.5625 BTC, is at block 1,050,000, around 2028. Hashprice roughly halves overnight and the least efficient machines switch off.',
     game: 'Same schedule. In simulated markets the price reaction is a d20 roll; in live runs the price stays the real one.' },
@@ -951,7 +956,7 @@ const GOALS = [
     game: 'Your bitcoin is credited straight away. The explorer shows the real countdown for your solo blocks.' },
   { id: 'deepgeo', ch: 'Endgame', t: 'Superhot rock', goal: 'Build deep geothermal.', ok: (u) => u[566] > 0,
     real: 'Geothermal plants already run on hot water a few kilometres down, in Iceland, Kenya, California and elsewhere. Several projects are now trying to drill far deeper, where rock is hot enough that one well could make many times more power. It is promising and unproven at scale.',
-    game: 'Deep geothermal is the game\'s: steady, $6/MWh, up to 160 MW. It sits between fission and orbital solar on the ladder.' },
+    game: 'Deep geothermal is the game\'s: steady, $4/MWh, up to 160 MW. It sits between hydro and orbital solar on the renewable branch.' },
   { id: 'orbital', ch: 'Endgame', t: 'Power from orbit', goal: 'Build an orbital solar station.', ok: (u) => u[568] > 0,
     real: 'In orbit the sun never sets and no clouds get in the way. Engineers have studied beaming that power down as microwaves for decades, and small tests have now done it, at the scale of milliwatts. A power station in orbit would need enormous structures launched cheaply.',
     game: 'Orbital solar is the game\'s: free power, day and night, up to 300 MW, received by a field of antennas on the ground.' },
@@ -1006,7 +1011,7 @@ function openLedger(focus) {
 const WHY = {
   deepgeo: ['Deep geothermal (game)', 'Real today: geothermal plants tap hot water a few kilometres down, and projects are testing drilling much deeper, to rock hot enough to make far more power per well. Nobody runs a 15 km superhot well yet. The game builds one anyway.', 'fusion'],
   orbital: ['Orbital solar (game)', 'Real today: small experiments have beamed power from orbit, including a 2023 test that sent a measurable trickle to the ground. A station that delivers megawatts, day and night, doesn\'t exist. The game\'s does.', 'fusion'],
-  fusion: ['The game\'s late ladder', 'Fusion experiments have produced more energy from the reaction than the lasers delivered to it, but no fusion plant sells power yet. Past fission, the ladder is the game\'s: deep geothermal, orbital solar and fusion are real research, and the free energy core is pure fantasy.'],
+  fusion: ['The game\'s late tree', 'Fusion experiments have produced more energy from the reaction than the lasers delivered to it, but no fusion plant sells power yet. The tops of the tree are the game\'s: deep geothermal, orbital solar and fusion are real research, and the free energy core is pure fantasy.'],
   sites: ['Several sites', 'Big miners spread out on purpose. One heatwave, one tariff hike or one new law can\'t hit every site at once, and each place has a different cheap hour, season and risk. In the game your sites share one wallet and one view of the network, and each runs its own plant, weather and power.', 'site'],
   site: ['Where you mine', 'Miners go where power is cheap and stays cheap: stranded hydro, flared gas, cold places with surplus geothermal, grids that pay big loads to be flexible. Every place trades something for that price: weather, reliability, distance, or how welcome miners are.'],
   dry: ['Dry season', 'Hydro power depends on rain. In the dry months rivers run low, the dams make less power, and the country needs what\'s left for homes and businesses, so miners get less.', 'site'],
@@ -1048,7 +1053,7 @@ const WHY = {
   weather: ['Weather', 'Rain cools the plant and weakens solar. Storms lock wind turbines and bring lightning. Dust storms clog filters.'],
   block: ['Block found', 'Your hash beat the target, so your block joins the chain and its coinbase transaction pays you the subsidy plus every fee in the block.', 'blocks'],
   solo: ['Solo vs pool', 'Pool and solo have the same expected income. The pool pays you a little every block; solo pays nothing until you find a whole block yourself.'],
-  unlock: ['Unlocks', 'Upgrading a power source to level 3 unlocks the next rung of the ladder: cheaper or bigger power.'],
+  unlock: ['Unlocks', 'Upgrading a power source to level 3 unlocks what grows from it on the power tree: cheaper or bigger power.'],
   event: ['Random events', 'Each day there is a chance of an event. Hard and Brutal roll more often. Some are real mining risks, some are the game\'s drama.'],
   mempool: ['The mempool', 'Unconfirmed transactions wait in each node\'s mempool. Miners build the next block from it, taking the highest fee rates first, until the block is full.', 'mempool'],
 };
@@ -1953,8 +1958,8 @@ function showEvent(id, u) {
     $('#modal button').onclick = () => { E.choose(0); closeModal(); tip('halving'); setTimeout(() => tipNudge('Another halving survived', 'If the game showed you why halvings matter, the tip jar takes any amount, even 21 sats.'), 2500); };
     return;
   } else if (id === 21) {
-    openModal(`<div class="evhead"><div class="die" id="die">?</div><div class="evt"><h2>Ignite the core</h2><span class="dim">The end of the ladder</span></div></div>
-      <p>Everything is in place. One roll decides it: <b>12 or higher</b> and the free energy core holds. Lower, and it collapses and you try again in 30 days.</p>
+    openModal(`<div class="evhead"><div class="die" id="die">?</div><div class="evt"><h2>Ignite the core</h2><span class="dim">The top of the power tree</span></div></div>
+      <p>Everything is in place. One roll decides it: <b>12 or higher</b>${u[145] > 0 ? ` (you add <b>+${u[145]}</b> from earlier tries)` : ''} and the free energy core holds. Lower, and it stays standing and tries again in 10 days, 4 easier each time.</p>
       <div class="choices"><button class="btn btn-p">Roll the d20</button></div>`);
     $('#modal button').onclick = () => { const d = $('#die'); d.classList.add('rolling'); setTimeout(() => { E.choose(0); const uu = UI(); d.classList.remove('rolling'); d.textContent = uu[19]; setTimeout(closeModal, 1400); }, 900); };
     return;
@@ -1974,7 +1979,7 @@ function showEvent(id, u) {
   });
 }
 
-// ---- the end of the ladder: a short sequence, then what free energy would really do to mining
+// ---- the top of the tree: a short sequence, then what free energy would really do to mining
 function showFinale(u) {
   const f = $('#finale'); const lines = [`Day ${u[15]}. The core holds.`, 'Unlimited power, at $0 a megawatt-hour.', `Your plant mines at ${hash(u[11])}, and every box is pure profit.`, 'For now.'];
   f.innerHTML = `<div class="bloom"></div><div class="flines">${lines.map((t, i) => `<p style="animation-delay:${1.2 + i * 1.6}s">${t}</p>`).join('')}</div><button class="btn btn-p fgo" style="animation-delay:${1.2 + lines.length * 1.6}s">Continue</button>`;
@@ -1988,7 +1993,7 @@ function closingCard(u) {
     <p>Bitcoin adjusts its difficulty every 2,016 blocks so that blocks keep coming about every ten minutes, however much hashing joins in. Free power would bring a flood of new machines. Difficulty would climb with them, until each machine earned barely more than it cost to buy, house and cool. The power bill would vanish and the profit would vanish with it, competed away by everyone else's free power.</p>
     <p>That's the rule this whole game runs on: mining profits attract hashrate, and hashrate competes the profit away. Miners end up spending roughly what the block reward is worth, whether on power, machines or something else.</p>
     <div class="rows"><div class="row"><span>Bitcoin</span><b class="num">${btcf(u[1])}</b></div><div class="row"><span>Cash</span><b class="num">${money(u[0])}</b></div><div class="row"><span>Sites</span><b class="num">${u[562]}</b></div><div class="row"><span>Halvings survived</span><b class="num">${u[14]}</b></div></div>
-    <p class="note">The core was the game's one fantasy. Everything below it on the ladder was as real as we could make it, and the last three rungs say so when they aren't.</p>
+    <p class="note">The core was the game's one fantasy. Everything below it on the power tree was as real as we could make it, and the three game nodes say so.</p>
     <div class="choices" style="flex-direction:row;flex-wrap:wrap"><button class="btn btn-p" data-a="new">New run</button><button class="btn" data-a="keep">Keep mining</button><button class="btn" data-a="ledger">Open the ledger</button><button class="btn" data-a="tip">${ic('heart')}Support the game</button></div>`);
   const m = $('#modal');
   m.querySelector('[data-a=tip]').onclick = () => openDonate(() => closingCard(u));
@@ -2010,26 +2015,29 @@ function showOver(kind) {
   $('#modal button').onclick = () => { overShown = false; newRunScreen(); };
 }
 
-// ------------------------------------------------------------------ ladder
+// ------------------------------------------------------------------ power tree
 function openLadder() {
   const u = UI();
-  const rungs = LADDER.slice(0, 11); let curTier = 0; rungs.forEach((k, n) => { if (u[430 + k] > 0) curTier = n; });
-  const tiers = rungs.map((t, n) => { const k = KINDS[t];
+  const node = (t) => { const k = KINDS[t];
     const unlocked = u[430 + t] > 0, lvl = t === 21 ? u[567] : t === 22 ? u[569] : u[60 + t], cnt = t === 21 ? u[566] : t === 22 ? u[568] : u[70 + t];
     const state = t === 6 && !u[30] && !cnt ? 'skipped' : !unlocked ? 'locked' : lvl >= 3 ? 'maxed' : cnt ? 'built' : 'open';
-    return `<div class="tier ${state === 'locked' || state === 'skipped' ? 'locked' : ''} ${n === curTier ? 'cur' : ''}"><span class="thumb">${thumb(k.spr, 64)}</span>
-      <span class="lbl" style="color:${state === 'maxed' ? 'var(--hash)' : state === 'locked' || state === 'skipped' ? 'var(--muted)' : 'var(--volt)'}">${String(n + 1).padStart(2, '0')}${k.game ? ' · game' : ''} · ${{ locked: 'Locked', maxed: 'Maxed', built: 'Built', open: 'Can build', skipped: 'No river here: skipped' }[state]}</span>
-      <b style="font-size:13px">${k.name}</b><span class="num" style="color:var(--volt)">${power(CAP[t][2])} max</span><span style="color:var(--muted)">${k.desc}</span>
+    const next = state === 'open' || state === 'built';
+    const from = parentsOf(t).length ? `<span style="color:var(--muted)">from ${nameList(parentsOf(t))}</span>` : '';
+    return `<div class="tier ${state === 'locked' || state === 'skipped' ? 'locked' : ''} ${next ? 'cur' : ''}"><span class="thumb">${thumb(k.spr, 64)}</span>
+      <span class="lbl" style="color:${state === 'maxed' ? 'var(--hash)' : state === 'locked' || state === 'skipped' ? 'var(--muted)' : 'var(--volt)'}">${k.game ? 'game · ' : ''}${{ locked: 'Locked', maxed: 'Maxed', built: 'Built', open: 'Can build', skipped: 'No river here: skipped' }[state]}</span>
+      <b style="font-size:13px">${k.name}</b><span class="num" style="color:var(--volt)">${power(CAP[t][2])} max</span><span style="color:var(--muted)">${k.desc}</span>${from}
       <span class="dots">${[1, 2, 3].map((q) => `<span class="${lvl >= q ? 'on' : ''}"></span>`).join('')}</span></div>`;
-  }).join('');
-  const req = [['Survive 2 halvings', u[140]], ['A fusion tokamak at level 3', u[141]], ['Hold ₿ 21 in reserve', u[142]], [`2016 blocks in a row with no power shortage (now ${u[13] >= 2016 ? 2016 : u[13]})`, u[143]]];
-  openModal(`<div class="mh"><h2>Power ladder</h2><button class="ib" data-x aria-label="Close">${ic('x')}</button></div>
-    <p>Build each source and upgrade it to level 3 to unlock the next. Cheaper power keeps old miners alive through halvings. Everything up to fission exists today; the rungs marked game don't, yet. ${whyBtn('fusion')}</p>
-    <div class="ladder">${tiers}</div>
+  };
+  const branch = (title, color, ks) => `<div class="branch"><span class="lbl" style="color:${color}">${title}</span>${ks.map(node).join('')}</div>`;
+  const req = [['Survive a halving', u[140]], ['A fusion tokamak or orbital solar at level 3', u[141]], ['Hold ₿ 21 in reserve', u[142]], [`2016 blocks in a row with no power shortage (now ${u[13] >= 2016 ? 2016 : u[13]})`, u[143]]];
+  openModal(`<div class="mh"><h2>Power tree</h2><button class="ib" data-x aria-label="Close">${ic('x')}</button></div>
+    <p>Max out a source (level 3) to open what grows from it. The grid opens two branches: <b>fossil</b> is cheap to build and pays for fuel; <b>renewable</b> is free to run but follows the weather until hydro. Coal or wind opens <b>nuclear</b>. Fusion or orbital solar opens the core. Diesel is a backup you can build any time. ${whyBtn('fusion')}</p>
+    <div class="ladder">${node(0)}${node(1)}</div>
+    <div class="tree">${branch('Fossil', 'var(--btc)', [2, 3])}${branch('Renewable', 'var(--hash)', [4, 5, 6, 21, 22])}${branch('Nuclear', 'var(--volt)', [7, 8])}</div>
     <div class="card" style="padding:14px;display:flex;gap:14px;flex-wrap:wrap;box-shadow:inset 0 0 0 2px rgba(95,230,224,.5)">
       <span class="thumb" style="width:120px;height:110px;display:flex;align-items:flex-end;justify-content:center;background:#2B3A22;border-radius:10px">${thumb('B_CORE', 108)}</span>
-      <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:8px"><span class="lbl" style="color:var(--hash)">12 · game · The end of the ladder</span><b class="px" style="color:var(--hash);font-size:18px">Free energy core</b>
-      <span style="color:var(--muted);font-size:13px">∞ MW at $0. Costs ${money(u[159])} and one lucky roll. The hardest finish in the game.</span>
+      <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:8px"><span class="lbl" style="color:var(--hash)">game · The top of the tree</span><b class="px" style="color:var(--hash);font-size:18px">Free energy core</b>
+      <span style="color:var(--muted);font-size:13px">∞ MW at $0. Costs ${money(u[159])} and one lucky roll; a failed roll keeps the core and makes the next one easier.</span>
       <div class="reqs">${req.map(([t, ok]) => `<div class="req ${ok ? 'ok' : ''}"><i>${ok ? ic('check') : ''}</i><span>${t}</span></div>`).join('')}</div></div></div>`, true);
   $('#modal [data-x]').onclick = closeModal;
 }
@@ -2170,7 +2178,7 @@ $('#b-learn').onclick = () => {
   <div><b>Curtailment</b>: when the grid is short, it pays big loads to switch off. Accept a call and your grid-fed boxes go dark for 6 hours for a credit. Decline and you pay the spike price.</div>
   <div><b>Your power contract</b>: the grid price depends on difficulty: $35, $45 or $55 per MWh. Power is most of a miner's running cost, and it decides who survives a halving.</div>
   <div><b>Game prices</b>: machines and power plants cost less than in real life so a run fits in an evening. Hashrates, J/TH, difficulty, rewards, fees and the halving schedule are real.</div>
-  <div><b>The late ladder</b>: after fission come deep geothermal, orbital solar and fusion. They're marked game: real research, built nowhere yet. The free energy core is the one pure fantasy.</div>
+  <div><b>The power tree</b>: the grid opens a fossil branch (gas, coal) and a renewable one (solar, wind, hydro, deep geothermal, orbital solar). Coal or wind opens nuclear (fission, fusion). Fusion or orbital solar opens the core. Deep geothermal, orbital solar and fusion are marked game: real research, built nowhere yet. The free energy core is the one pure fantasy.</div>
   <div><b>Where</b>: each run is set somewhere real: Texas, Iceland, Paraguay, Ethiopia, Bhutan or an oil well in North Dakota. Power, weather, rules and risks differ. Only Texas has spot and demand-response contracts.</div>
   <div><b>Parts and crew</b> (Site tab): boards, power supplies and fans fail one at a time. Hire technicians to swap them from your spares, or call a contractor per box. Guards deter raids.</div>
   <div><b>Pools</b> (tap ₿): a big pool nearby, a cheap one overseas with more stale shares, or a small PPLNS pool that pays when it finds blocks. Hot or overclocked boxes get shares rejected.</div>
@@ -2185,7 +2193,9 @@ $('#b-learn').onclick = () => {
 
 // ------------------------------------------------------------------ live market (mempool.space)
 const MP = 'https://mempool.space/api';
-let market = { price: 73324, netTh: 9.5555e8, height: 975493, remaining: 215, est: -0.0739, fees: 0.03, diff: 1.4836e14, at: 0, src: 'built-in snapshot (13 Nov 2026)' };
+// Simulated runs always start here (same seed, same game); Live runs start from today's numbers.
+const SNAPSHOT = { price: 73324, netTh: 9.5555e8, height: 975493, remaining: 215, est: -0.0739, fees: 0.03, diff: 1.4836e14, at: 0, src: 'built-in snapshot (13 Nov 2026)' };
+let market = { ...SNAPSHOT };
 try { const c = JSON.parse(localStorage.getItem('pg-market') || 'null'); if (c && c.price) market = c; } catch (_) {}
 let marketState = market.at ? 'cached' : 'snapshot', liveRun = true;
 const getJ = (path) => Promise.race([fetch(MP + path, { cache: 'no-store' }).then((r) => { if (!r.ok) throw r.status; return r.json(); }), new Promise((_, bad) => setTimeout(() => bad('timeout'), 6000))]);
@@ -2204,12 +2214,8 @@ async function fetchMarket() {
   pushMarket();
   return marketState;
 }
-function pushMarket() { E.set_market(market.price, market.netTh, market.height, market.remaining, market.est, market.fees, liveRun ? 1 : 0); }
+function pushMarket() { const m = liveRun ? market : SNAPSHOT; E.set_market(m.price, m.netTh, m.height, m.remaining, m.est, m.fees, liveRun ? 1 : 0); }
 pushMarket();
-setInterval(async () => {
-  if (!running || !UI()[241]) return;
-  try { const px = await getJ('/v1/prices'); if (px.USD > 0) { E.set_price(+px.USD); market.price = +px.USD; } } catch (_) {}
-}, 5 * 60 * 1000);
 const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 2 ? 'just now' : m < 120 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; };
 
 // ------------------------------------------------------------------ menu, saves, new run
@@ -2290,18 +2296,18 @@ function newRunScreen() {
   running = running && false; ['#hud', '#pill', '#speed', '#dock', '#np', '#status'].forEach((s) => $(s).hidden = true); statusHtml = ''; $('#memo').hidden = true; memoResume = false; stopSpeaking(); closeInspector(); setTool(-1);
   const has = !!localStorage.getItem('pg-save');
   E.set_site(pickSite); E.preview_seed(pickSeed); redraw = true; const u = UI();
-  const tr = [['River', u[30] ? 'Yes: a dam is possible' : 'None: the ladder skips hydro', u[30] ? 'var(--hash)' : 'var(--alarm)'],
+  const tr = [['River', u[30] ? 'Yes: a dam is possible' : 'None: wind opens deep geothermal directly', u[30] ? 'var(--hash)' : 'var(--alarm)'],
     ['Sunshine', u[31] > 0.95 ? 'Strong' : u[31] > 0.7 ? 'Average' : 'Weak: solar struggles', u[31] > 0.7 ? 'var(--hash)' : 'var(--alarm)'],
     ['Wind', u[32] > 1.0 ? 'Strong' : u[32] > 0.7 ? 'Average' : 'Weak', u[32] > 0.7 ? 'var(--hash)' : 'var(--alarm)'],
     ['Coal seam', u[33] ? 'Yes: cheap coal' : 'None: coal shipped in (+$15/MWh)', u[33] ? 'var(--hash)' : 'var(--alarm)']];
   openModal(`<div style="display:flex;flex-direction:column;gap:4px"><h2 class="px" style="color:var(--volt);font-size:44px;line-height:44px">Power Grid</h2>
-    <p>Mine bitcoin. Climb the power ladder. Reach free energy, if you can.</p></div>
+    <p>Mine bitcoin. Grow your power tree. Reach free energy, if you can.</p></div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="lbl">Map seed</span><span class="tag num" style="font-size:15px">${hex(pickSeed)}</span><button class="btn" data-a="reroll">Reroll</button><span class="dim" style="font-size:12px">Challenge code <b class="num" style="color:var(--ink)">${chCode(pickSeed, pickSite, pickDiff)}</b>${seedBest[chCode(pickSeed, pickSite, pickDiff)] ? ` · your best after a year ${money(seedBest[chCode(pickSeed, pickSite, pickDiff)])}` : ''}</span><button class="btn mini" data-a="copycode">Copy</button><input class="codein" placeholder="Paste a code" aria-label="Challenge code" maxlength="14"><button class="btn mini" data-a="usecode">Use</button></div>
     <div class="traits">${tr.map(([n, t, c]) => `<div class="trait"><b style="color:${c}">${n}</b>${t}</div>`).join('')}</div>
     <div><span class="lbl">Where</span><div class="diffs sites" style="margin-top:6px">${SITES_UI.map((st, i) => `<button class="btn ${i === pickSite ? 'on' : ''}" data-site="${i}" aria-pressed="${i === pickSite}"><span class="px" style="font-size:13px;color:${i === pickSite ? 'var(--volt)' : 'var(--ink)'}">${st.t}</span><small>${st.power} · ${st.climate}</small><small class="risk">${st.risks}</small></button>`).join('')}</div></div>
     <div><span class="lbl">Market</span><div class="diffs" style="margin-top:6px">
-      <button class="btn ${liveRun ? 'on' : ''}" data-m="1"><span class="px" style="font-size:13px;color:${liveRun ? 'var(--volt)' : 'var(--ink)'}">Live</span><small>Today's real price, network hashrate, block height and fees. The price keeps following the real one.</small></button>
-      <button class="btn ${liveRun ? '' : 'on'}" data-m="0"><span class="px" style="font-size:13px;color:${liveRun ? 'var(--ink)' : 'var(--volt)'}">Simulated</span><small>Starts from the same numbers, then the price wanders on its own with crashes and pumps.</small></button></div>
+      <button class="btn ${liveRun ? 'on' : ''}" data-m="1"><span class="px" style="font-size:13px;color:${liveRun ? 'var(--volt)' : 'var(--ink)'}">Live</span><small>Starts from today's real price, network hashrate, block height and fees, then the market plays out in the game.</small></button>
+      <button class="btn ${liveRun ? '' : 'on'}" data-m="0"><span class="px" style="font-size:13px;color:${liveRun ? 'var(--ink)' : 'var(--volt)'}">Simulated</span><small>Starts from a fixed snapshot of the market, so the same seed plays the same way. Good for challenges.</small></button></div>
       <div class="mkt">${marketState === 'loading' ? 'Fetching today\'s numbers…' : `<span><b>${money(market.price)}</b> BTC</span><span><b>${(market.diff / 1e12).toFixed(2)} T</b> difficulty</span><span><b>${(market.netTh / 1e6).toFixed(0)} EH/s</b> network</span><span>block <b>${market.height.toLocaleString()}</b></span><span>retarget in <b>${market.remaining}</b> (est ${market.est > 0 ? '+' : ''}${(market.est * 100).toFixed(1)}%)</span><span class="dim">${marketState === 'live' ? '● live from mempool.space' : marketState === 'cached' ? 'saved from mempool.space ' + ago(market.at) + ' (offline)' : market.src + ' (offline)'}</span>`}</div></div>
     <div><span class="lbl">Difficulty</span><div class="diffs" style="margin-top:6px">${DIFFS.map(([n, d], i) => `<button class="btn ${i === pickDiff ? 'on' : ''}" data-d="${i}"><span class="px" style="font-size:13px;color:${i === pickDiff ? 'var(--volt)' : 'var(--ink)'}">${n}</span><small>${d}</small></button>`).join('')}</div></div>
     <div class="choices" style="flex-direction:row;flex-wrap:wrap"><button class="btn btn-p" data-a="start" style="font-size:16px">${ic('play')}Start run</button>${has ? '<button class="btn" data-a="cont">Continue saved run</button>' : ''}${!has && localStorage.getItem('pg-save-prev') ? '<button class="btn" data-a="prev">Restore previous run</button>' : ''}</div>

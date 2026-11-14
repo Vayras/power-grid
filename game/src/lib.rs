@@ -523,7 +523,7 @@ unsafe fn fill_ui(gg: &Game, rr: &Renderer) {
         // core requirements
         let req = gg.core_reqs();
         for x in 0..4 { u[140 + x] = req[x] as u8 as f64; }
-        u[144] = gg.core_cooldown as f64;
+        u[144] = gg.core_cooldown as f64; u[145] = gg.core_bonus() as f64;
         // costs + unlocks per kind
         for k in 0..N_KINDS {
             let cost = if is_miner(k as u8) { gg.new_price(k as u8) } else { KINDS[k].cost };

@@ -28,12 +28,13 @@ fn empty_neighbours(g: &Game, i: i32, j: i32) -> u32 {
 /// Spiral out from the plant and find a powered spot with few hot neighbours.
 fn find_spot(g: &Game, kind: u8) -> Option<(i32, i32)> {
     let k = KINDS[kind as usize];
-    for r in 1..RING {
+    // boxes stay inside the wall ring; power plants may sit outside it
+    let ring = if is_power(kind) { 14 } else { RING };
+    for r in 1..ring {
         for j in 24 - r..=24 + r { for i in 24 - r..=24 + r {
             if (i - 24).abs() != r && (j - 24).abs() != r { continue; }
             if g.can_place(kind, i, j) != 0.0 { continue; }
             if is_miner(kind) && empty_neighbours(g, i, j) > 2 { continue; }
-            if (i - 24).abs() >= RING - 0 || (j - 24).abs() >= RING - 0 { continue; }
             if !is_power(kind) && !g.would_connect(kind, i, j) { continue; }
             if is_power(kind) {
                 // power: must touch the existing cluster so it joins the same net
@@ -63,7 +64,8 @@ fn miner_profit_day(g: &Game, kind: u8, usd_mwh: f64) -> f64 {
     rev - k.kw * 24.0 / 1000.0 * usd_mwh
 }
 
-struct Out { end_day: u64, gas_day: Option<u64>, diesel_day: Option<u64>, bankrupt: bool, worth: f64, miners: usize, curtail: u32, fee_spikes: u32 }
+struct Out { end_day: u64, gas_day: Option<u64>, diesel_day: Option<u64>, // gas_day: first branch node maxed; diesel_day: grid maxed
+    bankrupt: bool, worth: f64, miners: usize, curtail: u32, fee_spikes: u32 }
 
 static mut LEDGER: [f64; 8] = [0.0; 8]; // 0 blocks (mining+power) 1 day tick/events 2 choices 3 sell btc 4 repairs/clean 5 miners+fans 6 power upgrades 7 walls
 fn book(i: usize, d: f64) { unsafe { LEDGER[i] += d; } }
@@ -122,8 +124,8 @@ fn run(seed: u32, diff: u32, live: bool, max_days: u64, verbose: bool) -> Out {
             _ => {}
         }
         book(4, g.cash - c); let c = g.cash;
-        if g.unlocked[1] && diesel_day.is_none() { diesel_day = Some(g.day); }
-        if g.unlocked[2] && gas_day.is_none() { gas_day = Some(g.day); if verbose { println!("  gas on day {}", g.day); } break; }
+        if g.unlocked[K_GAS as usize] && diesel_day.is_none() { diesel_day = Some(g.day); }
+        if g.branch_done() && gas_day.is_none() { gas_day = Some(g.day); if verbose { println!("  branch done on day {}", g.day); } break; }
         // 1) miners: fill cheap capacity with the best payback box
         let cheap: f64 = g.blds.iter().filter(|b| b.kind == K_GRID || b.kind == K_GAS).map(|b| KINDS[b.kind as usize].cap_kw[(b.level - 1) as usize] * if b.kind == K_GRID { g.grid_f() } else { 1.0 }).sum();
         let grid_price = g.usd_mwh(K_GRID);
@@ -170,12 +172,12 @@ fn run(seed: u32, diff: u32, live: bool, max_days: u64, verbose: bool) -> Out {
         let full = installed > cheap * 0.8;
         if let Some(x) = g.blds.iter().position(|b| b.kind == K_GRID) {
             let c = g.upgrade_cost(x);
-            if c > 0.0 && (full || !g.unlocked[1]) && g.cash > c + reserve { g.upgrade(x); }
+            if c > 0.0 && (full || !g.unlocked[K_GAS as usize]) && g.cash > c + reserve { g.upgrade(x); }
         }
-        // 3) ladder: once the grid is maxed, push diesel to level 3 for gas
-        if g.unlocked[1] && full {
-            match g.blds.iter().position(|b| b.kind == K_DIESEL) {
-                None => { if g.cash > KINDS[K_DIESEL as usize].cost + reserve { if let Some((i, j)) = find_spot(&g, K_DIESEL) { g.place(K_DIESEL, i, j, 0); } } }
+        // 3) tree: once the grid is maxed, build gas right away (while there's room by the plant), then push it to level 3
+        if g.unlocked[K_GAS as usize] {
+            match g.blds.iter().position(|b| b.kind == K_GAS) {
+                None => { if g.cash > KINDS[K_GAS as usize].cost + reserve { if let Some((i, j)) = find_spot(&g, K_GAS) { g.place(K_GAS, i, j, 0); } } }
                 Some(x) => { let c = g.upgrade_cost(x); if c > 0.0 && g.cash > c + reserve { g.upgrade(x); } }
             }
         }
@@ -230,18 +232,20 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     let runs: u32 = a.get(1).and_then(|s| s.parse().ok()).unwrap_or(20);
     let diff: u32 = a.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
-    let live = a.get(3).map_or(false, |s| s == "live");
-    let verbose = a.get(4).map_or(false, |s| s == "v");
+    let live = a.iter().skip(3).any(|s| s == "live");
+    let verbose = a.iter().skip(3).any(|s| s == "v");
     // `check`: rules that must hold whatever the balance is
-    if a.get(1).map_or(false, |s| s == "check") { if !full::check_no_river() { eprintln!("LADDER CHECK FAILED"); std::process::exit(1); } return; }
+    if a.get(1).map_or(false, |s| s == "check") { if !full::check_no_river() { eprintln!("TREE CHECK FAILED"); std::process::exit(1); } return; }
     // `full`: play the whole ladder and report the day each rung opened (PG_DAYS, default 4000; PG_SITE)
     if a.get(3).map_or(false, |s| s == "full") {
         let days = std::env::var("PG_DAYS").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(4000);
         let site = std::env::var("PG_SITE").ok().and_then(|v| v.parse::<u8>().ok()).unwrap_or(0);
-        let res = full::report(runs, diff, site, days, verbose);
+        let res = full::report(runs, diff, site, days, verbose, live);
         // CI guard: on Normal in Texas, most runs must finish the ladder and win
         let won = res.iter().filter(|r| r.won.is_some()).count() as u32;
         if diff == 0 && site == 0 && runs >= 10 && days >= 4000 && won * 2 < runs { eprintln!("BALANCE CHECK FAILED: only {won}/{runs} Normal runs reached the core"); std::process::exit(1); }
+        // and Hard is a challenge, not a wall
+        if diff == 1 && site == 0 && runs >= 10 && days >= 4000 && won * 3 < runs { eprintln!("BALANCE CHECK FAILED: only {won}/{runs} Hard runs reached the core"); std::process::exit(1); }
         return;
     }
     let mut gas = Vec::new(); let mut dsl = Vec::new(); let mut bk = 0; let mut never = 0; let mut bkd: Vec<f64> = Vec::new();
@@ -258,8 +262,8 @@ fn main() {
     bkd.sort_by(|a, b| a.partial_cmp(b).unwrap());
     println!("  bankrupt days: {:?}", bkd);
     let med = |v: &Vec<f64>| if v.is_empty() { f64::NAN } else { v[v.len() / 2] };
-    println!("diff {diff} {} runs {runs}: diesel median day {:.0} | gas median day {:.0} (~{:.0} min play) range {:.0}-{:.0} | never {never} | bankrupt {bk}",
+    println!("diff {diff} {} runs {runs}: grid maxed median day {:.0} | first branch maxed median day {:.0} (~{:.0} min play) range {:.0}-{:.0} | never {never} | bankrupt {bk}",
         if live { "live" } else { "sim" }, med(&dsl), med(&gas), play_minutes(med(&gas)), gas.first().copied().unwrap_or(f64::NAN), gas.last().copied().unwrap_or(f64::NAN));
     // CI guard: on Normal, most runs must reach gas before the first halving
-    if diff == 0 && never * 2 > runs { eprintln!("BALANCE CHECK FAILED: {never}/{runs} Normal runs never reached gas"); std::process::exit(1); }
+    if diff == 0 && never * 2 > runs { eprintln!("BALANCE CHECK FAILED: {never}/{runs} Normal runs never maxed a branch node"); std::process::exit(1); }
 }

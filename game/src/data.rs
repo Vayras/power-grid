@@ -1,4 +1,4 @@
-//! Static game data: building kinds, the power ladder, miners and cooling.
+//! Static game data: building kinds, the power tree, miners and cooling.
 //! Miner specs follow real Bitmain units (one container = 10 machines). Power-plant
 //! capacities and costs are scaled to what fits on a 48x48 map.
 use crate::sprites as S;
@@ -22,7 +22,7 @@ pub const K_POLE: u8 = 17;
 pub const K_WALL: u8 = 18;
 pub const K_SIGN: u8 = 19;
 pub const K_GREENHOUSE: u8 = 20;
-// The game's late ladder: real research today, built nowhere. They sit between fission and fusion.
+// The renewable branch's late nodes: real research today, built nowhere.
 pub const K_DEEPGEO: u8 = 21;
 pub const K_ORBITAL: u8 = 22;
 pub const N_KINDS: usize = 23;
@@ -57,16 +57,16 @@ const fn aux(sprite: usize, cost: f64, kw: f64) -> Kind {
 }
 
 pub static KINDS: [Kind; N_KINDS] = [
-    pw(1, 1, S::B_GRID, 12_000.0, 8_000.0, 18_000.0, [250.0, 600.0, 1_200.0], 45.0, false),
-    pw(1, 1, S::B_DIESEL, 6_000.0, 6_000.0, 8_000.0, [500.0, 1_000.0, 2_000.0], 240.0, false),
-    pw(2, 2, S::B_GAS, 8_000.0, 8_000.0, 12_000.0, [2_000.0, 5_000.0, 10_000.0], 60.0, false),
-    pw(3, 2, S::B_COAL, 8_000.0, 8_000.0, 10_000.0, [10_000.0, 20_000.0, 40_000.0], 45.0, true),
-    pw(2, 2, S::B_SOLAR, 12_000.0, 12_000.0, 16_000.0, [5_000.0, 12_000.0, 25_000.0], 0.0, false),
-    pw(1, 1, S::B_WIND0, 14_000.0, 16_000.0, 20_000.0, [6_000.0, 12_000.0, 20_000.0], 0.0, false),
-    pw(2, 2, S::B_HYDRO, 150_000.0, 200_000.0, 250_000.0, [20_000.0, 40_000.0, 80_000.0], 10.0, false),
-    pw(2, 2, S::B_FISSION, 400_000.0, 500_000.0, 700_000.0, [50_000.0, 100_000.0, 150_000.0], 28.0, false),
-    pw(2, 2, S::B_FUSION, 3_000_000.0, 3_600_000.0, 4_500_000.0, [200_000.0, 350_000.0, 500_000.0], 8.0, false),
-    pw(2, 2, S::B_CORE, 5_000_000.0, 0.0, 0.0, [1.0e12, 1.0e12, 1.0e12], 0.0, false),
+    pw(1, 1, S::B_GRID, 12_000.0, 8_000.0, 12_000.0, [250.0, 600.0, 1_200.0], 45.0, false),
+    pw(1, 1, S::B_DIESEL, 6_000.0, 6_000.0, 8_000.0, [500.0, 1_000.0, 2_000.0], 150.0, false),
+    pw(2, 2, S::B_GAS, 10_000.0, 10_000.0, 15_000.0, [2_000.0, 5_000.0, 10_000.0], 32.0, false),
+    pw(3, 2, S::B_COAL, 30_000.0, 35_000.0, 45_000.0, [10_000.0, 20_000.0, 40_000.0], 24.0, true),
+    pw(2, 2, S::B_SOLAR, 12_000.0, 14_000.0, 18_000.0, [5_000.0, 12_000.0, 25_000.0], 0.0, false),
+    pw(1, 1, S::B_WIND0, 35_000.0, 40_000.0, 50_000.0, [8_000.0, 16_000.0, 30_000.0], 0.0, false),
+    pw(2, 2, S::B_HYDRO, 120_000.0, 160_000.0, 220_000.0, [20_000.0, 40_000.0, 80_000.0], 6.0, false),
+    pw(2, 2, S::B_FISSION, 400_000.0, 550_000.0, 750_000.0, [50_000.0, 100_000.0, 150_000.0], 12.0, false),
+    pw(2, 2, S::B_FUSION, 2_000_000.0, 2_600_000.0, 3_400_000.0, [200_000.0, 350_000.0, 500_000.0], 3.0, false),
+    pw(2, 2, S::B_CORE, 10_000_000.0, 0.0, 0.0, [1.0e12, 1.0e12, 1.0e12], 0.0, false),
     // Game prices are about 1/6 of real (REAL_PRICE below) so a run fits in an evening.
     // Hashrate, power draw and everything Bitcoin pays are real.
     mn(S::B_MINER1, 600.0, 1_040.0, 30.7),        // 10x Antminer S19j Pro  (104 TH, 29.5 J/TH)
@@ -84,17 +84,34 @@ pub static KINDS: [Kind; N_KINDS] = [
     // greenhouse next door: buys the waste heat of miners within HEAT_REACH tiles
     Kind { w: 2, d: 2, sprite: S::B_GREENHOUSE, cost: 6_000.0, up2: 0.0, up3: 0.0, cap_kw: [0.0; 3], usd_mwh: 0.0, th: 0.0, kw: 0.0, coal_pad: false, pad: false, reach: 0, electric: false },
     // deep geothermal: wells 15 km down to superhot rock (game)
-    pw(2, 2, S::B_DEEPGEO, 900_000.0, 1_200_000.0, 1_600_000.0, [80_000.0, 120_000.0, 160_000.0], 6.0, false),
+    pw(2, 2, S::B_DEEPGEO, 600_000.0, 800_000.0, 1_000_000.0, [80_000.0, 120_000.0, 160_000.0], 4.0, false),
     // orbital solar: sunlight collected in orbit and beamed to a ground station, day and night (game)
-    pw(2, 2, S::B_ORBITAL, 1_500_000.0, 1_800_000.0, 2_400_000.0, [120_000.0, 200_000.0, 300_000.0], 0.0, false),
+    pw(2, 2, S::B_ORBITAL, 2_200_000.0, 2_800_000.0, 3_600_000.0, [120_000.0, 200_000.0, 300_000.0], 0.0, false),
 ];
 
 /// A utility only allots a site so much: this many grid hookups, and after that you make your own power.
 /// It is what makes the ladder worth climbing before the halvings do.
 pub const GRID_MAX: usize = 4;
-/// The order of the power ladder: maxing one unlocks the next.
-pub const LADDER: [u8; 12] = [K_GRID, K_DIESEL, K_GAS, K_COAL, K_SOLAR, K_WIND, K_HYDRO, K_FISSION, K_DEEPGEO, K_ORBITAL, K_FUSION, K_CORE];
-pub fn next_tier(k: u8) -> Option<u8> { let p = LADDER.iter().position(|x| *x == k)?; LADDER.get(p + 1).copied() }
+/// The power tree. Diesel is open from the start (a backup genset, not a step). From the grid two branches
+/// grow: fossil (gas, coal) and renewable (solar, wind, then hydro, deep geothermal, orbital). Nuclear opens
+/// from the top of either early branch, and the core from the top of either late one.
+/// Each entry: (node, parents). Maxing ANY parent (level 3) opens the node.
+pub const TREE: [(u8, [u8; 2]); 12] = [
+    (K_GRID, [NONE, NONE]), (K_DIESEL, [NONE, NONE]),
+    (K_GAS, [K_GRID, NONE]), (K_COAL, [K_GAS, NONE]),
+    (K_SOLAR, [K_GRID, NONE]), (K_WIND, [K_SOLAR, NONE]),
+    (K_HYDRO, [K_WIND, NONE]), (K_DEEPGEO, [K_HYDRO, NONE]), (K_ORBITAL, [K_DEEPGEO, NONE]),
+    (K_FISSION, [K_COAL, K_WIND]), (K_FUSION, [K_FISSION, NONE]),
+    (K_CORE, [K_FUSION, K_ORBITAL]),
+];
+pub const NONE: u8 = 255;
+/// The display order of the tree: branch by branch, the core last.
+pub const LADDER: [u8; 12] = [K_GRID, K_DIESEL, K_GAS, K_COAL, K_SOLAR, K_WIND, K_HYDRO, K_DEEPGEO, K_ORBITAL, K_FISSION, K_FUSION, K_CORE];
+pub fn parents(k: u8) -> [u8; 2] { TREE.iter().find(|t| t.0 == k).map_or([NONE, NONE], |t| t.1) }
+/// The nodes that maxing `k` opens.
+pub fn children(k: u8) -> impl Iterator<Item = u8> { TREE.iter().filter(move |t| t.1.contains(&k)).map(|t| t.0) }
+/// The first node of each branch: maxing either is the end of the early game.
+pub fn first_branch(k: u8) -> bool { k == K_GAS || k == K_SOLAR }
 
 // Heat reuse. Almost every watt a miner draws comes out as heat. Air-cooled exhaust is only ~40 °C, so a
 // grower can use about half of it; liquid-cooled machines give 50-60 °C water that's far easier to use.
@@ -205,16 +222,17 @@ pub const T_PARTS_FAILED: f64 = 44.0;  // arg = parts that failed today with nob
 pub const T_PARTS_FIXED: f64 = 45.0;   // arg = what the contractor charged
 pub const T_TARIFF: f64 = 46.0;        // arg = new contract price $/MWh
 pub const T_DRY_SEASON: f64 = 47.0;    // arg = 1 started, 0 ended
-pub const T_NO_MARKET: f64 = 48.0;
-pub const T_GRID_FULL: f64 = 49.0;     // the utility won't give this site another connection     // this site has no power market to buy spot or demand response from
+pub const T_NO_MARKET: f64 = 48.0;     // this site has no power market to buy spot or demand response from
+pub const T_GRID_FULL: f64 = 49.0;     // the utility won't give this site another connection
 
 pub const T_MILESTONE: f64 = 50.0;     // arg = index into MILESTONES
+pub const T_AUTO_SOLD: f64 = 51.0;     // arg = BTC sold to cover bills
 
 /// Backers' milestones. Miners raise money against hashrate they have actually switched on, so each target
 /// reached releases a tranche of cash: something to aim for between rungs, and a cushion after a halving.
 /// (what, target, cash): what 0 = hashrate in TH/s, 1 = halvings survived.
 pub const MILESTONES: [(u8, f64, f64); 9] = [
-    (0, 10_000.0, 1_500.0), (0, 50_000.0, 5_000.0), (0, 100_000.0, 10_000.0), (0, 250_000.0, 25_000.0), (1, 1.0, 25_000.0),
+    (0, 10_000.0, 3_000.0), (0, 50_000.0, 10_000.0), (0, 100_000.0, 20_000.0), (0, 250_000.0, 40_000.0), (1, 1.0, 25_000.0),
     (0, 500_000.0, 50_000.0), (0, 1_000_000.0, 100_000.0), (0, 2_000_000.0, 200_000.0), (1, 2.0, 250_000.0),
 ];
 
@@ -320,7 +338,18 @@ pub const OPEN_SITE_USD: f64 = 40_000.0;
 pub const WELL_DECLINE: f64 = 0.997;
 /// Arguing with the inspector and losing costs this many times the fine.
 pub const INSPECTOR_LOSS_X: f64 = 2.5;
-/// Your grid power contract by difficulty, $/MWh. Real miners pay roughly $25-60; it decides who survives a halving.
-pub const GRID_USD: [f64; 3] = [35.0, 45.0, 55.0];
+/// What harder difficulties add to a site's grid contract, $/MWh. Real miners pay roughly $25-60; it decides who survives a halving.
+pub const GRID_EXTRA: [f64; 3] = [0.0, 8.0, 12.0];
+/// Difficulty: the marginal miner's breakeven hashprice falls this much each retarget as hardware improves
+/// (about -6% / -10% / -14% a year), and the random part of each retarget is drawn from this range.
+pub const HP_DECAY: [f64; 3] = [0.9975, 0.995, 0.994];
+pub const RETARGET_RANGE: [(f64, f64); 3] = [(-0.025, 0.025), (-0.025, 0.035), (-0.04, 0.05)];
+/// At a halving the weakest machines unplug and the survivors' breakeven drops by this factor.
+pub const HALVING_HP: f64 = 0.72;
+/// Transaction fees grow this much a day (~20% a year): more of what miners earn as the subsidy shrinks.
+pub const FEE_GROWTH: f64 = 1.0005;
+/// The free energy core: a failed trial keeps the core and tries again after this many days, with this added to the roll.
+pub const CORE_RETRY_DAYS: u64 = 10;
+pub const CORE_TRY_BONUS: u32 = 4;
 /// Starting cash by difficulty.
-pub const START_CASH: [f64; 3] = [80_000.0, 60_000.0, 50_000.0];
+pub const START_CASH: [f64; 3] = [100_000.0, 75_000.0, 60_000.0];

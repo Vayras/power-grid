@@ -138,6 +138,8 @@ pub struct Game {
     pub unlocked_x: [bool; 2],
     // backers' milestones already paid, one bit each (see MILESTONES)
     pub milestones: u32,
+    // failed core trials: each adds CORE_TRY_BONUS to the next roll
+    pub core_tries: u32,
 }
 
 impl Game {
@@ -166,7 +168,7 @@ impl Game {
             fee_mult: 1.0, fee_days: 0, fee_spikes: 0,
             curtail_blocks: 0, curtail_mode: 0, curtail_pay: 0.0, curtail_extra: 0.0, curtails: 0, curtail_earned: 0.0, grid_kw: 0.0,
             anchor_px: m.price, hp_eq: 0.0,
-            grid_usd: GRID_USD[diff as usize % 3], spot_x: CURTAIL_SPOT_X,
+            grid_usd: 0.0, spot_x: CURTAIL_SPOT_X,
             scen: Vec::new(), scen_id: 0, max_miner: K_MINER4, scen_worth0: 0.0, scen_hold_btc: 0.0,
             mkt_idx: 1.0, stock: [0; 4], buy_used: false, last_flood: 0, used_bought: 0, miners_sold: 0,
             contract: C_FIXED, contract_from: 0, switches: 0, spot_walk: 1.0, spot_cap: 0.0,
@@ -174,11 +176,11 @@ impl Game {
             piped: Vec::new(), gh_kw: Vec::new(), heat_kw: 0.0, heat_earned: 0.0,
             pool: 0, pool_switches: 0, acc_th: 0.0, pplns_paid: 0.0, pplns_exp: 0.0, pool_blocks: 0,
             techs: 0, guards: 0, spares: [0; 3], spare_target: [0; 3], fails: [0; 3], swapped: [0; 3], wages_paid: 0.0, parts_lost_th: 0.0,
-            site, well_f: 1.0, tariffs: 0, follower: false, day_off: 0, unlocked_x: [false; 2], milestones: 0,
+            site, well_f: 1.0, tariffs: 0, follower: false, day_off: 0, unlocked_x: [false; 2], milestones: 0, core_tries: 0,
         };
-        g.grid_usd = SITES[site as usize].grid + 10.0 * (diff.min(2) as f64);
+        g.grid_usd = SITES[site as usize].grid + GRID_EXTRA[diff.min(2) as usize];
         g.hp_eq = g.hashprice();
-        g.unlocked[0] = true;
+        g.unlocked[K_GRID as usize] = true; g.unlocked[K_DIESEL as usize] = true;
         g.gen_map();
         g.rebuild_nets();
         g.mkt_idx = g.mkt_raw(); g.restock(true);
@@ -354,11 +356,11 @@ impl Game {
         match kind {
             0..=9 => self.unlocked[kind as usize],
             10 | 11 => true,
-            12 => self.unlocked[1],
-            13 => self.unlocked[2],
+            12 => self.unlocked[K_GAS as usize] || self.unlocked[K_SOLAR as usize],   // grid maxed
+            13 => self.branch_done(),
             14 | 17 | 18 | 19 | 20 => true,
             21 | 22 => self.unlocked_x[(kind - 21) as usize],
-            15 => self.unlocked[3],
+            15 => self.branch_done(),
             _ => false,
         }
     }
@@ -366,10 +368,15 @@ impl Game {
     pub fn tier_unlocked(&self, k: u8) -> bool { if k >= 21 { self.unlocked_x[(k - 21) as usize] } else { self.unlocked[k as usize] } }
     pub fn unlock_tier(&mut self, k: u8) { if k >= 21 { self.unlocked_x[(k - 21) as usize] = true; } else { self.unlocked[k as usize] = true; } }
 
+    /// The first node of a branch (gas or solar) is maxed: the early game is over.
+    pub fn branch_done(&self) -> bool { self.unlocked[K_COAL as usize] || self.unlocked[K_WIND as usize] }
+
     pub fn core_reqs(&self) -> [bool; 4] {
-        let fusion3 = self.blds.iter().any(|b| b.kind == K_FUSION && b.level >= 3);
-        [self.halvings >= 2, fusion3, self.btc >= 21.0, self.streak >= RETARGET]
+        let top = self.blds.iter().any(|b| (b.kind == K_FUSION || b.kind == K_ORBITAL) && b.level >= 3);
+        [self.halvings >= 1, top, self.btc >= 21.0, self.streak >= RETARGET]
     }
+    /// What a failed trial adds to the next core roll.
+    pub fn core_bonus(&self) -> i32 { (self.core_tries * CORE_TRY_BONUS) as i32 }
 
     /// 0 ok, else a toast code explaining why not.
     pub fn can_place(&self, kind: u8, i: i32, j: i32) -> f64 {
@@ -585,24 +592,25 @@ impl Game {
         let (kind, lvl) = (b.kind, b.level);
         { let k = KINDS[kind as usize]; let (bi, bj) = (b.i as i32, b.j as i32); self.fx.push((2, bi, bj, k.w, k.d)); }
         if kind == K_WALL { self.rebuild_security(); return; }
-        if lvl >= 3 { self.open_next(kind); }
+        if lvl >= 3 { self.open_children(kind); }
         self.dispatch(false);
     }
 
-    /// Maxing a rung opens the next one. A dam needs a river, so on a map without one the rung before
-    /// hydro opens the rung after it as well (hydro itself still unlocks, for your other sites).
-    fn open_next(&mut self, kind: u8) {
-        let mut k = kind;
-        while let Some(nx) = next_tier(k) {
+    /// Maxing a node opens its children in the power tree. A dam needs a river, so on a map without one
+    /// hydro's children open as well (hydro itself still unlocks, for your other sites).
+    fn open_children(&mut self, kind: u8) {
+        let kids: [u8; 4] = { let mut a = [NONE; 4]; for (x, c) in children(kind).enumerate().take(4) { a[x] = c; } a };
+        for &nx in kids.iter().filter(|c| **c != NONE) {
             let skip = nx == K_HYDRO && !self.t_river;
             if !self.tier_unlocked(nx) { self.unlock_tier(nx); if !skip { self.toast(T_UNLOCK, nx as f64); } }
-            if !skip { break; }
-            k = nx;
+            if skip { self.open_children(nx); }
         }
     }
-    /// Saves from before the no-river rule: a maxed rung always has its next rung open.
-    fn mend_ladder(&mut self) {
-        for x in 0..self.blds.len() { let b = self.blds[x]; if is_power(b.kind) && b.kind != K_CORE && b.level >= 3 { self.open_next(b.kind); } }
+    /// On load, unlocks come from what is built: every maxed node has its children open. Saves from the
+    /// old linear ladder land on the tree this way.
+    fn mend_tree(&mut self) {
+        self.unlocked[K_GRID as usize] = true; self.unlocked[K_DIESEL as usize] = true;
+        for x in 0..self.blds.len() { let b = self.blds[x]; if is_power(b.kind) && b.kind != K_CORE && b.level >= 3 { self.open_children(b.kind); } }
         self.toasts.clear();
     }
 
@@ -800,7 +808,8 @@ impl Game {
     }
     pub fn set_solo(&mut self, solo: bool) { if self.solo != solo { self.solo = solo; self.toast(T_MODE, solo as u8 as f64); self.dispatch(false); } }
 
-    pub fn set_price(&mut self, p: f64) { if self.live && p > 0.0 { self.price = p; self.dispatch(false); } }
+    /// Live runs start from the real price and simulate forward, so the real price only matters before the first day.
+    pub fn set_price(&mut self, p: f64) { if self.live && self.day == 0 && p > 0.0 { self.price = p; self.anchor_px = p; self.dispatch(false); } }
 
     pub fn toast(&mut self, code: f64, arg: f64) { if self.toasts.len() < 15 { self.toasts.push((code, arg)); } }
 
@@ -994,7 +1003,7 @@ impl Game {
                 K_GRID => (if self.brown_days > 0 || curtailed || capped { 0.0 } else { base * self.grid_f() }, if self.contract == C_SPOT { spot_now } else { self.grid_usd * spot }),
                 K_DIESEL => (base, k.usd_mwh * self.diesel_f * if self.fuel_days > 0 { 0.6 } else { 1.0 }),
                 K_GAS => (base, k.usd_mwh * self.gas_f * if self.gas_days > 0 { 2.1 } else { 1.0 }),
-                K_COAL => (base, k.usd_mwh + if self.t_coal { 0.0 } else { 15.0 }),
+                K_COAL => (base, k.usd_mwh + if self.t_coal { 0.0 } else { 8.0 }),
                 K_SOLAR => (base * daylight * self.t_sun * match self.weather { W_RAIN => 0.4, W_STORM => 0.15, W_DUST => 0.5, _ => 1.0 }, 0.0),
                 K_WIND => (base * if self.storm_days > 0 || self.weather == W_STORM { 0.0 } else { fmin(self.wind_now * if self.weather == W_DUST { 1.4 } else { 1.0 }, 1.3) }, 0.0),
                 K_HYDRO => (base * if self.drought_days > 0 { 0.4 } else { 1.0 }, k.usd_mwh),
@@ -1080,7 +1089,7 @@ impl Game {
         if self.scen_id > 0 {
             self.scen_day();
             if self.over != 0 { return; }
-        } else if !self.live && !self.follower {
+        } else if !self.follower {
             let vol = [0.025, 0.035, 0.055][self.diff as usize];
             // random walk around a trend that rises ~15% a year; the pull keeps runs from drifting to $5k or $1M
             self.anchor_px *= 1.0004;
@@ -1095,7 +1104,7 @@ impl Game {
         self.spot_walk = clamp(self.spot_walk * (1.0 + (self.rng.f() - 0.5) * 0.3) + (1.0 - self.spot_walk) * 0.25, 0.5, 2.0);
         if self.dr_mwh > 0.0 { let c = self.dr_mwh * DR_STANDBY; self.cash += c; self.dr_earned += c; self.dr_mwh = 0.0; }
         if self.fee_days > 0 && !self.follower { self.fee_days -= 1; if self.fee_days == 0 { self.fee_mult = 1.0; self.toast(T_FEES_CALM, 0.0); } }
-        if self.scen_id == 0 && !self.follower { self.fees = self.base_fees * (0.6 + self.rng.f() * 0.8) * self.fee_mult; }
+        if self.scen_id == 0 && !self.follower { self.base_fees *= FEE_GROWTH; self.fees = self.base_fees * (0.6 + self.rng.f() * 0.8) * self.fee_mult; }
         if !self.follower { self.market_day(); }
         for t in [&mut self.heat_days, &mut self.gas_days, &mut self.brown_days, &mut self.drought_days,
                   &mut self.storm_days, &mut self.throttle_days, &mut self.fuel_days] { if *t > 0 { *t -= 1; } }
@@ -1118,19 +1127,27 @@ impl Game {
         }
         self.parts_day();
         // money trouble
+        // bills are paid in cash: if there's bitcoin in the wallet, sell just enough to cover them first
+        if self.cash < 0.0 && self.btc > 0.0 && self.price > 0.0 && self.scen_id == 0 {
+            let amt = fmin(self.btc, -self.cash / (self.price * 0.995) * 1.02);
+            self.btc -= amt; self.cash += amt * self.price * 0.995;
+            self.toast(T_AUTO_SOLD, amt);
+        }
         if self.cash < 0.0 {
             self.unpaid_days += 1;
-            let early = !self.unlocked[2];
+            let early = !self.branch_done();
             if self.diff == 0 && early && !self.follower && self.day >= self.last_bailout_day + 30 {
                 self.cash += 15_000.0; self.bailouts_used += 1; self.last_bailout_day = self.day; self.unpaid_days = 0;
                 self.toast(T_BAILOUT, 15_000.0);
             } else {
-                let limit = [7, 3, 1][self.diff as usize];
+                let limit = [7, 5, 3][self.diff as usize];
                 self.toast(T_UNPAID, (limit - self.unpaid_days as i32) as f64);
                 if self.unpaid_days as i32 >= limit { self.over = 1; }
             }
         } else { self.unpaid_days = 0; }
         self.milestones_day();
+        if self.over == 0 && self.pending == EV_NONE && self.core_tries > 0 && self.block >= self.core_cooldown && self.has(K_CORE)
+            && self.core_reqs().iter().all(|x| *x) { self.pending = EV_CORE_TRIAL; self.roll = 0; return; }
         let p = [0.22, 0.38, 0.45][self.diff as usize];
         if self.scen_id > 0 { self.scen_events(); }
         else if self.day > 3 && self.rng.f() < p { self.random_event(); }
@@ -1155,21 +1172,23 @@ impl Game {
             self.milestones |= 1 << m; self.cash += MILESTONES[m].2; self.toast(T_MILESTONE, m as f64);
         }
     }
-    /// The next step up the ladder on this site: (cost, kind, true if it is an upgrade). None once fusion is maxed.
+    /// The cheapest step that opens a locked node of the power tree on this site: (cost, kind, true if it is
+    /// an upgrade). Once the tree is open, the core itself. None when there's nothing left to climb.
     pub fn next_rung(&self) -> Option<(f64, u8, bool)> {
-        for w in 0..LADDER.len() - 1 {
-            let k = LADDER[w];
-            if !self.tier_unlocked(k) { return None; }
-            if k == K_HYDRO && !self.t_river { continue; }
-            let last = LADDER[w + 1] == K_CORE; // the core wants fusion at level 3, which is also what unlocks it
-            if self.tier_unlocked(LADDER[w + 1]) && !last { continue; }
-            let best = (0..self.blds.len()).filter(|&x| self.blds[x].kind == k).max_by_key(|&x| self.blds[x].level);
-            return match best {
-                None => Some((KINDS[k as usize].cost, k, false)),
-                Some(x) => { let c = self.upgrade_cost(x); if c > 0.0 { Some((c, k, true)) } else { None } }
+        let mut best: Option<(f64, u8, bool)> = None;
+        for &(node, _) in TREE.iter() {
+            if node == K_CORE || node == K_DIESEL || !self.tier_unlocked(node) { continue; }
+            if node == K_HYDRO && !self.t_river { continue; }
+            if !children(node).any(|c| !self.tier_unlocked(c)) { continue; }
+            let top = (0..self.blds.len()).filter(|&x| self.blds[x].kind == node).max_by_key(|&x| self.blds[x].level);
+            let step = match top {
+                None => Some((KINDS[node as usize].cost, node, false)),
+                Some(x) => { let c = self.upgrade_cost(x); if c > 0.0 { Some((c, node, true)) } else { None } }
             };
+            if let Some(st) = step { if best.map_or(true, |b| st.0 < b.0) { best = Some(st); } }
         }
-        None
+        if best.is_none() && self.tier_unlocked(K_CORE) && !self.has(K_CORE) { return Some((KINDS[K_CORE as usize].cost, K_CORE, false)); }
+        best
     }
 
     fn has(&self, kind: u8) -> bool { self.blds.iter().any(|b| b.kind == kind) }
@@ -1183,8 +1202,8 @@ impl Game {
             sw[0] * if summer { 22.0 } else { 10.0 },
             if self.has(K_GAS) { 12.0 } else { 0.0 },
             sw[1] * if self.has(K_GRID) { 12.0 } else { 0.0 },
-            if self.live || self.follower { 0.0 } else { 10.0 },   // live mode: the price is the real price
-            if self.live || self.follower { 0.0 } else { 9.0 },
+            if self.follower { 0.0 } else { 10.0 },
+            if self.follower { 0.0 } else { 9.0 },
             0.0, // (was "lucky block": pools pay per share, so this is now the solo-mining choice instead)
             if self.has(K_COAL) { 8.0 } else { 0.0 },
             sw[2] * if self.has(K_HYDRO) { 8.0 } else { 0.0 },
@@ -1306,10 +1325,11 @@ impl Game {
             }
             EV_CORE_TRIAL => {
                 let r = 1 + self.rng.below(20) as i32; self.roll = r;
-                if r >= 12 { self.over = 2; }
+                if r + self.core_bonus() >= 12 { self.over = 2; }
                 else {
-                    if let Some(x) = self.blds.iter().position(|b| b.kind == K_CORE) { self.remove(x); }
-                    self.core_cooldown = self.block + 30 * BLOCKS_PER_DAY;
+                    // the core stays built: it is tuned for another try, and each try gets easier
+                    self.core_tries += 1;
+                    self.core_cooldown = self.block + CORE_RETRY_DAYS * BLOCKS_PER_DAY;
                     self.toast(T_CORE_FAIL, r as f64);
                 }
             }
@@ -1327,9 +1347,9 @@ impl Game {
         // Hashrate chases profit: when hashprice is above the marginal miner's breakeven, machines get
         // plugged in and difficulty rises; below it, old machines switch off. Better hardware keeps
         // pushing that breakeven down (~15% a year).
-        self.hp_eq *= [0.996, 0.993, 0.989][self.diff as usize];
+        self.hp_eq *= HP_DECAY[self.diff as usize];
         let ch = if self.retargets == 0 && self.est_change != 0.0 { self.est_change } else {
-            let (lo, hi) = [(-0.025, 0.025), (-0.025, 0.04), (-0.05, 0.08)][self.diff as usize];
+            let (lo, hi) = RETARGET_RANGE[self.diff as usize];
             let pull = if self.hp_eq > 0.0 { clamp(0.12 * (self.hashprice() / self.hp_eq - 1.0), -0.08, 0.10) } else { 0.0 };
             clamp(lo + self.rng.f() * (hi - lo) + self.diff_swing + pull, -0.15, 0.15)
         };
@@ -1344,10 +1364,10 @@ impl Game {
     fn halving(&mut self) {
         self.reward = subsidy(self.block);
         self.halvings += 1;
-        self.hp_eq *= 0.62; // the weakest machines unplug; the survivors settle for less
+        self.hp_eq *= HALVING_HP; // the weakest machines unplug; the survivors settle for less
         let r = 1 + self.rng.below(20) as i32;
         self.roll = r;
-        let m = if self.live || self.scen_id > 0 { 1.0 } else { match r { 1..=4 => 0.8, 5..=10 => 0.95, 11..=16 => 1.1, 17..=19 => 1.22, _ => 1.45 } };
+        let m = if self.scen_id > 0 { 1.0 } else { match r { 1..=4 => 0.8, 5..=10 => 0.95, 11..=16 => 1.1, 17..=19 => 1.22, _ => 1.45 } };
         self.price *= m;
         self.ev_arg = m;
         self.pending = EV_HALVING;
@@ -1556,7 +1576,9 @@ impl Game {
             self.site as f64, self.well_f, self.tariffs as f64, self.follower as u8 as f64, self.day_off as f64,
             self.unlocked_x[0] as u8 as f64, self.unlocked_x[1] as u8 as f64,
             // build .27: backers' milestones
-            self.milestones as f64];
+            self.milestones as f64,
+            // build .32: failed core trials
+            self.core_tries as f64];
         // v9+: version, then how many scalars follow, so later builds can append fields without breaking old saves
         f(scal[0]); f((scal.len() - 1) as f64);
         for v in scal.iter().skip(1) { f(*v); }
@@ -1614,6 +1636,7 @@ impl Game {
         if has(112) { g.unlocked_x = [fs[111] != 0.0, fs[112] != 0.0]; }
         // a save from before milestones: the ones it has already passed count as paid, so loading it isn't a windfall
         g.milestones = if has(113) { fs[113] as u32 } else { u32::MAX };
+        if has(114) { g.core_tries = fs[114] as u32; }
         if has(110) { g.follower = fs[109] != 0.0; g.day_off = fs[110] as u64; }
         if has(108) { g.site = (fs[106] as usize).min(N_SITES - 1) as u8; g.well_f = clamp(fs[107], 0.25, 1.0); g.tariffs = fs[108] as u32; }
         if has(105) {
@@ -1640,7 +1663,7 @@ impl Game {
             for bb in 0..k.d as i32 { for a in 0..k.w as i32 { g.tile_mut(b.i as i32 + a, b.j as i32 + bb).occ = x as i16; } }
         }
         g.rebuild_nets(); g.sync_workers();
-        g.mend_ladder();
+        g.mend_tree();
         g.dispatch(false); g.update_temps(); g.dispatch(false); // temperatures and heat links, not just the defaults
         Some(g)
     }
