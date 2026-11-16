@@ -30,17 +30,20 @@ rustup target add wasm32-unknown-unknown
 ```
 
 Sprites: every building, tree, person and ground tile is a voxel model in `tools/voxel/models.py`, rendered offline
-by a small voxel renderer (`tools/voxel/vox.py`: sun with soft shadows, sky light with ambient occlusion, a contact
-shadow on the ground, 2x supersampling) and packed into `web/atlas.png`, `web/sprites.json` and `src/sprites.rs`:
+by a small voxel renderer (`tools/voxel/vox.py`) and baked into pixel art: hard sun shadows and a few stepped light
+tones per face, cool shadows, a small palette per sprite, dark contour lines where one part sits in front of another
+and a 1 px violet outline. The result is packed into `web/atlas.png`, `web/sprites.json` and `src/sprites.rs`:
 
 ```sh
 python3 -m venv tools/voxel/.venv && tools/voxel/.venv/bin/pip install numpy pillow
 tools/voxel/.venv/bin/python tools/voxel/build.py                 # ~25 s, then ./build.sh
 tools/voxel/.venv/bin/python tools/voxel/build.py --sheet sheet.png --only B_GAS,TREE_5   # preview a few
+tools/voxel/.venv/bin/python tools/voxel/build.py --style voxel   # the smooth voxel renders instead
 ```
 
-The atlas is drawn at 2x the base tile (128x64 px). The renderer box-filters a 1x copy at load and picks a density
-per frame, so the canvas never needs more pixels than the screen shows. The old OpenGFX builder (`tools/build_atlas.py`)
+The art is 1x (a tile is 64x32 px), stored doubled in a 2x atlas so either style fits the same format. The game draws
+the map at 1x and the browser scales the canvas up by a whole number of device pixels with nearest-neighbour, so every
+art pixel is the same crisp square at each zoom step. The old OpenGFX builder (`tools/build_atlas.py`)
 is kept for reference but no longer feeds the game.
 
 ## Balance simulator
@@ -114,7 +117,12 @@ Upload `web/` to any static host. Make sure `.wasm` is served as `application/wa
 - **Live vs Simulated:** Live starts from today's real market (mempool.space) and plays it forward in the game; Simulated
   starts from a fixed snapshot, so a seed always plays the same. The rules are the same after day 0.
 - **Milestones:** your backers pay out as hashrate comes online (10 PH/s up to 2 EH/s) and when you survive each halving:
-  $3,000 up to $250,000. The next one shows under the alerts. Not in replays.
+  $3,000 up to $250,000. The next one shows under the bell. Not in replays.
+- **The bell (or N):** live alerts (power shortages, hot or dusty boxes, failed parts) with their fixes, the next
+  milestone, and a log of everything that happened, stamped with the block. The badge counts alerts plus unread events,
+  red when something is wrong. Only replies to what you just did (can't build there, not enough cash) still pop up.
+- **Build list (or B):** the chevron folds the sidebar (the bottom sheet on phones) down to its tabs; picking a tab
+  opens it again. It stays folded between visits.
 - **Skip ahead (the double arrow, or F):** top speed until an event, an alarm, a milestone, a new rung, or enough cash for the next step on the tree.
 - **Building:** the tool stays in hand until Esc or Done. With a mouse, drag a miner to lay a row.
 - Random events (heatwaves, gas spikes, brownouts, price swings, fires, inspectors, curtailment calls,
@@ -179,10 +187,10 @@ Upload `web/` to any static host. Make sure `.wasm` is served as `application/wa
 ```
 src/lib.rs       exports to JS, allocator, UI mailbox
 src/game.rs      map generation, simulation, events, save/load
-src/render.rs    software renderer (isometric, voxel sprites at 1x or 2x density)
+src/render.rs    software renderer (isometric, pixel-art sprites drawn at 1x)
 src/data.rs      building kinds, power tree, events
 src/sprites.rs   generated sprite table
 web/             index.html, style.css, game.js, game.wasm, atlas.png, sw.js, manifest
-tools/voxel/     voxel models, renderer and atlas builder
+tools/voxel/     voxel models, renderer, pixel-art pass and atlas builder
 tools/           balance simulator, history builder, legacy pixel-art atlas builder
 ```

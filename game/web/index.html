@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&display=swap">
-<link rel="stylesheet" href="style.css?v=43">
+<link rel="stylesheet" href="style.css?v=45">
 </head>
 <body>
 <canvas id="view" aria-label="The plant, seen from above" role="img"></canvas>
@@ -30,6 +30,7 @@
 <button id="pill" hidden aria-label="Open the network: mempool, blocks and charts"><span id="p-text"></span><span class="bar"><i id="p-bar"></i></span><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 7h12M2 11h9M2 15h5"/></svg></button>
 
 <div id="rail" hidden>
+  <button class="ib" id="b-bell" aria-label="Notifications" aria-expanded="false" aria-controls="notif" title="Notifications" data-n=""><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 12V7l1-3 3-2 3 2 1 3v5M2 12h12M7 14h2"/></svg></button>
   <button class="ib" id="b-ledger" aria-label="Ledger: goals and how mining really works" data-n="0"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h5l1 1 1-1h5v12H9l-1 1-1-1H2zM8 3v11"/></svg></button>
   <button class="ib" id="b-layers" aria-label="Map view: airflow, grid, security" aria-expanded="false" title="Map view"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2l6 3-6 3-6-3zM2 8l6 3 6-3M2 11l6 3 6-3"/></svg></button>
   <button class="ib" id="b-sites" aria-label="Your sites around the world" hidden><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a7 7 0 1 0 .01 0M1 8h14M8 1c-3.5 3.5-3.5 10.5 0 14M8 1c3.5 3.5 3.5 10.5 0 14"/></svg></button>
@@ -45,11 +46,14 @@
 </header>
 
 <aside id="dock" class="glass" hidden>
-  <div id="tabs" role="tablist">
-    <button role="tab" data-tab="power" aria-selected="true">Power</button>
-    <button role="tab" data-tab="miners">Miners</button>
-    <button role="tab" data-tab="cooling">Cooling</button>
-    <button role="tab" data-tab="site">Site</button>
+  <div class="dhead">
+    <div id="tabs" role="tablist">
+      <button role="tab" data-tab="power" aria-selected="true">Power</button>
+      <button role="tab" data-tab="miners">Miners</button>
+      <button role="tab" data-tab="cooling">Cooling</button>
+      <button role="tab" data-tab="site">Site</button>
+    </div>
+    <button class="ib" id="b-dock" aria-expanded="true" aria-controls="items" aria-label="Collapse the build list" title="Collapse the build list (B)"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10l5-5 5 5"/></svg></button>
   </div>
   <div id="items"></div>
   <button id="b-ladder">Power tree</button>
@@ -64,6 +68,13 @@
     </div>
 </div>
 
+<div id="notif" class="glass" hidden role="dialog" aria-label="Notifications">
+  <div class="lh">Notifications<span class="sp"></span><button class="btn mini" id="notif-clear" hidden>Clear</button><button class="ib" id="notif-x" aria-label="Close"></button></div>
+  <div id="status" aria-live="polite" hidden></div>
+  <div id="nlog"></div>
+  <p id="nempty">All quiet. Alerts and events will show up here.</p>
+</div>
+
 <div id="placebar" class="glass" hidden>
   <span id="pb-text"></span>
   <span id="pb-mode" class="seg mini" role="tablist" aria-label="Buy new or used" hidden></span>
@@ -73,7 +84,6 @@
 </div>
 
 <div id="inspector" class="glass" hidden></div>
-<div id="status" hidden aria-live="polite"></div>
 <div id="hovertip" hidden></div>
 <button id="np" class="glass" hidden aria-label="Skip to the next song"><span class="lbl">Foreman FM</span><span id="np-t"></span><span id="np-skip"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l6 5-6 5zM12 3v10"/></svg></span></button>
 <div id="toasts" aria-live="polite"></div>
@@ -83,10 +93,10 @@
 
 <div id="boot"><div class="boot-title">Power Grid</div><div class="boot-bar"><i id="boot-bar"></i></div><div id="boot-msg">Loading the plant…</div></div>
 
-<script src="music.js?v=43"></script>
-<script src="history.js?v=43"></script>
-<script src="qr.js?v=43"></script>
-<script src="game.js?v=43"></script>
+<script src="music.js?v=45"></script>
+<script src="history.js?v=45"></script>
+<script src="qr.js?v=45"></script>
+<script src="game.js?v=45"></script>
 <div id="finale" hidden></div>
 </body>
 </html>

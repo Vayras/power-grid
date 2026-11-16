@@ -34,7 +34,7 @@
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;background:#E9E7E1;color:var(--ink);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;font-feature-settings:"cv11","ss01";-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
 button{font:inherit;color:inherit}
-#view{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;image-rendering:auto;touch-action:none;display:block}
+#view{position:fixed;inset:0 auto auto 0;width:100vw;height:100vh;height:100dvh;image-rendering:pixelated;touch-action:none;display:block}
 
 /* ---------------------------------------------------------------- primitives */
 .px{font-family:inherit;font-weight:600;letter-spacing:-.01em}
@@ -140,10 +140,28 @@ button:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
 #b-skip[aria-pressed=true]{background:var(--ink)!important;color:#fff}
 #b-menu{background:rgba(255,255,255,.5)}
 #b-donate{color:#E0475B}
-#b-ledger,#b-sites{position:relative}
+#b-ledger,#b-sites,#b-bell{position:relative}
 #b-ledger::after,#b-sites::after{content:attr(data-n);position:absolute;right:0;top:0;min-width:17px;height:17px;padding:0 4px;border-radius:99px;background:var(--accent);color:#fff;font:700 10px/17px Inter,sans-serif;text-align:center;box-shadow:0 0 0 2px rgba(255,255,255,.9)}
 #b-sites::after{background:var(--hash)}
 #b-ledger[data-n="0"]::after,#b-sites[data-n=""]::after{display:none}
+#b-bell::after{content:attr(data-n);position:absolute;right:0;top:0;min-width:17px;height:17px;padding:0 4px;border-radius:99px;background:var(--ink);color:#fff;font:700 10px/17px Inter,sans-serif;text-align:center;box-shadow:0 0 0 2px rgba(255,255,255,.9)}
+#b-bell[data-sev=warn]::after{background:var(--warn)}
+#b-bell[data-sev=alarm]::after{background:var(--neg)}
+#b-bell[data-n=""]::after{display:none}
+#b-bell.ring .ic{animation:ring .7s var(--ease);transform-origin:50% 2px}
+@keyframes ring{20%{transform:rotate(14deg)}40%{transform:rotate(-12deg)}60%{transform:rotate(8deg)}80%{transform:rotate(-4deg)}}
+
+/* notifications popover from the bell: live alerts on top, the event log under them */
+#notif{position:fixed;right:calc(12px + var(--safe-r));top:calc(88px + var(--safe-t));width:380px;max-height:calc(100vh - 100px - var(--safe-t) - var(--safe-b));padding:14px;display:flex;flex-direction:column;gap:8px;z-index:6;overflow-y:auto;overscroll-behavior:contain;animation:pop .18s var(--ease);background-image:var(--grain),var(--glass-strong)}
+#notif .lh{display:flex;align-items:center;gap:6px;font-weight:600;font-size:15px;padding-bottom:2px}
+#notif .lh .sp{flex:1}
+#notif .lh .ib{background:rgba(255,255,255,.5)}
+#notif .lh .btn{background:rgba(255,255,255,.55);min-height:30px;padding:4px 12px;font-size:12px}
+#nempty{margin:6px 0 4px;font-size:13px;color:var(--muted)}
+#nlog{display:flex;flex-direction:column;gap:6px}
+#nlog .nh{font-size:12px;font-weight:600;color:var(--muted);padding:6px 2px 0}
+#nlog .toast{animation:none;background:rgba(255,255,255,.5);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.6);align-items:center}
+#nlog .toast small{color:var(--faint);font-size:11px;margin-top:2px}
 
 /* map-view popover from the Layers button */
 #layers{position:fixed;right:calc(12px + var(--safe-r));top:calc(88px + var(--safe-t));width:270px;padding:14px;display:flex;flex-direction:column;gap:10px;z-index:6;animation:pop .18s var(--ease)}
@@ -159,6 +177,14 @@ button:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
 
 /* ---------------------------------------------------------------- build panel (left) */
 #dock{position:fixed;left:calc(12px + var(--safe-l));top:calc(88px + var(--safe-t));bottom:calc(12px + var(--safe-b));width:300px;padding:10px;display:flex;flex-direction:column;gap:10px;z-index:2}
+#dock .dhead{display:flex;align-items:center;gap:6px}
+#dock .dhead #tabs{flex:1;min-width:0}
+#b-dock{width:34px;height:34px;background:rgba(255,255,255,.38);box-shadow:inset 0 0 0 1px rgba(255,255,255,.5)}
+#b-dock .ic{transition:transform .18s var(--ease)}
+#dock.min{bottom:auto}
+#dock.min #items,#dock.min #b-ladder{display:none}
+#dock.min #b-dock .ic{transform:rotate(180deg)}
+#dock.min #tabs [role=tab][aria-selected=true]{background:none;color:var(--muted);box-shadow:none}
 #tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:3px;border-radius:13px;background:rgba(255,255,255,.38);box-shadow:inset 0 0 0 1px rgba(255,255,255,.5)}
 #tabs [role=tab]{border:0;background:none;padding:8px 0;border-radius:10px;font:600 12.5px/1 Inter,sans-serif;cursor:pointer;color:var(--muted);white-space:nowrap;transition:background .15s var(--ease),color .15s var(--ease)}
 #tabs [role=tab]:hover{color:var(--ink)}
@@ -169,7 +195,7 @@ button:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
 .item.on{background:rgba(255,255,255,.9);box-shadow:inset 0 0 0 2px var(--ink)}
 .item.locked{opacity:.55;cursor:not-allowed}
 .item .thumb{grid-row:1/span 4;width:76px;height:68px;border-radius:12px;background:rgba(255,255,255,.55);display:flex;align-items:flex-end;justify-content:center;overflow:hidden}
-.thumb i{display:block;background-image:url(atlas.png);background-repeat:no-repeat}
+.thumb i{display:block;background-image:var(--atlas,url(atlas.png));background-repeat:no-repeat}
 .item .n{font-weight:600;font-size:13.5px;line-height:18px}
 .item .s{font-size:11.5px;line-height:15px;color:var(--muted);margin-top:1px}
 .item .c{font-size:13px;color:var(--ink);font-weight:650;font-variant-numeric:tabular-nums;margin-top:4px}
@@ -205,9 +231,12 @@ button:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
 .fwseg button[aria-selected="true"] small.neg{color:var(--neg)}
 
 /* ---------------------------------------------------------------- toasts, alerts, memo, now playing, hover tip */
-#status{position:fixed;left:calc(324px + var(--safe-l));top:calc(88px + var(--safe-t));display:flex;flex-direction:column;gap:8px;z-index:3;width:min(380px,calc(100vw - 680px))}
-#status .st{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border-radius:16px;font-size:13px;background-image:var(--grain),var(--glass);background-size:180px 180px,auto;-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);box-shadow:var(--glass-edge)}
-#status .st span{margin-right:auto}
+#status{display:flex;flex-direction:column;gap:6px}
+#status .st{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border-radius:16px;font-size:13px;background:rgba(255,255,255,.5);box-shadow:inset 0 0 0 1px rgba(255,255,255,.6)}
+#status .steps{background:rgba(255,255,255,.5);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.6)}
+#status .st{flex-wrap:wrap;row-gap:6px;position:relative;padding-right:38px}
+#status .st>[data-dx]{position:absolute;right:6px;top:6px}
+#status .st>span{margin-right:auto;flex:1 1 170px}
 #status .st b{color:inherit}
 #status .st .btn{background:rgba(255,255,255,.55);min-height:34px;padding:6px 12px;font-size:12.5px}
 #status .st .btn-p{background:var(--ink);color:#fff}
@@ -308,7 +337,7 @@ body:has(#memo:not([hidden])) #inspector{top:calc(96px + var(--memo-h,150px) + v
 .tier.locked .thumb{filter:grayscale(1) opacity(.5)}
 .tier .thumb{height:64px;border-radius:12px;background:#fff;display:flex;align-items:flex-end;justify-content:center;overflow:hidden}
 .tier.cur .thumb{background:var(--sunk)}
-.tier .thumb i{display:block;background-image:url(atlas.png);background-repeat:no-repeat}
+.tier .thumb i{display:block;background-image:var(--atlas,url(atlas.png));background-repeat:no-repeat}
 .dots{display:flex;gap:3px}.dots span{width:8px;height:8px;border-radius:50%;background:var(--sunk-2)}.dots span.on{background:var(--ink)}
 .reqs{display:flex;flex-direction:column;gap:6px;font-size:13px}
 .req{display:flex;gap:8px;align-items:center}.req i{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--line-2);display:grid;place-items:center;font-style:normal;font-size:11px}
@@ -480,15 +509,21 @@ details.xp p{font-size:13px;margin:2px 0 8px !important}
 @keyframes fin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
 /* chrome is for tapping, not selecting: a shift-click on the map used to highlight every label */
-#topbar,#layers,#dock,#placebar,#inspector,#status,#toasts,#np,#memo,#hovertip,canvas{-webkit-user-select:none;user-select:none}
+#topbar,#layers,#notif,#dock,#placebar,#inspector,#toasts,#np,#memo,#hovertip,canvas{-webkit-user-select:none;user-select:none}
 
 /* ---------------------------------------------------------------- responsive */
 /* the BTC price always stays; spend and power give way first (both are in the Power panel too) */
 @media (max-width:1760px){#hud #h-spend{display:none}}
 @media (max-width:1620px){#hud #h-pow{display:none}#spd-t{display:none}}
 @media (max-width:1320px){#spd{width:72px}}
-@media (max-width:1100px) and (min-width:721px){#hud #h-btc{display:none}#dock{width:270px}#status,#toasts,#np{left:calc(294px + var(--safe-l))}#placebar{left:calc(50% + 141px)}#inspector{width:290px}}
+@media (max-width:1100px) and (min-width:721px){#hud #h-btc{display:none}#dock{width:270px}#toasts,#np{left:calc(294px + var(--safe-l))}#placebar{left:calc(50% + 141px)}#inspector{width:290px}}
 @media (max-width:960px) and (min-width:721px){#hud #h-hash{display:none}#pill{display:none!important}}
+/* with the build list folded, the things that sat beside it move to the left edge */
+@media (min-width:721px){
+  #np,#toasts{transition:left .2s var(--ease)}
+  #dock.min~#np,#dock.min~#toasts{left:calc(12px + var(--safe-l))}
+  #dock.min~#placebar{left:50%}
+}
 @media (max-width:720px){
   /* top bar wraps: money on top, network + time underneath; tools become a column on the right */
   #topbar{top:calc(8px + var(--safe-t));left:calc(8px + var(--safe-l));right:calc(8px + var(--safe-r));height:auto;flex-wrap:wrap;row-gap:4px;padding:6px;border-radius:18px}
@@ -518,15 +553,17 @@ details.xp p{font-size:13px;margin:2px 0 8px !important}
   .item.owned>span{padding:0}
   #b-ladder{padding:9px;font-size:12px}
   #placebar{left:50%;bottom:calc(var(--dock-h,170px) + 18px + var(--safe-b));max-width:calc(100vw - 16px);white-space:normal;flex-wrap:wrap;border-radius:20px}
-  #status{left:calc(8px + var(--safe-l));top:auto;bottom:calc(var(--dock-h,170px) + 18px + var(--safe-b));width:auto;max-width:calc(100vw - 16px);flex-direction:row;overflow-x:auto}
-  #status{align-items:flex-end}
-  #status .st,#status .steps{flex:none;font-size:12px;max-width:calc(100vw - 32px)}
+  #notif{right:calc(60px + var(--safe-r));top:calc(124px + var(--safe-t));width:calc(100vw - 76px - var(--safe-l) - var(--safe-r));max-height:calc(100dvh - var(--dock-h,170px) - 150px - var(--safe-t) - var(--safe-b))}
+  #status .st{font-size:12px;flex-wrap:wrap}
+  /* folded, the sheet is just its tab row, and the chevron points up to open it */
+  #b-dock .ic{transform:rotate(180deg)}
+  #dock.min #b-dock .ic{transform:none}
+  #dock.min{bottom:calc(8px + var(--safe-b))}
   #toasts{left:calc(8px + var(--safe-l));bottom:auto;top:calc(124px + var(--safe-t));width:calc(100vw - 76px)}
   #memo{left:calc(8px + var(--safe-l));right:auto;bottom:auto;top:calc(124px + var(--safe-t));width:calc(100vw - 76px)}
   body:has(#memo:not([hidden])) #inspector{top:auto;max-height:calc(100vh - var(--dock-h,170px) - 160px)}
   #np,#hovertip{display:none!important}
   #inspector{top:auto;width:auto;max-height:calc(100vh - var(--dock-h,170px) - 160px);border-radius:20px;background-image:var(--grain),var(--glass-strong)}
-  body:has(#inspector:not([hidden])) #status{display:none}
   /* dialogs become bottom sheets */
   #modal-wrap{align-items:flex-end;padding:0}
   #modal{width:100%!important;max-height:calc(100dvh - 24px - var(--safe-t));border-radius:24px 24px 0 0;padding:14px 18px calc(20px + var(--safe-b))}

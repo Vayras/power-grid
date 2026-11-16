@@ -1,6 +1,6 @@
 // Power Grid web shell: loads the Rust/WASM core, draws its framebuffer, and runs the UI.
 'use strict';
-const BUILD = 'build 2026-11-15.43';
+const BUILD = 'build 2026-11-16.45';
 (async function () {
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.innerHTML = html; return e; };
@@ -95,7 +95,7 @@ const ICONS = {
   cube: 'M8 1l6 3v8l-6 3-6-3V4zM2 4l6 3 6-3M8 7v8', chart: 'M1 15h14M2 12l4-5 3 3 5-7', broom: 'M11 1L7 8M3 9h8l2 6H2z',
   x: 'M3 3l10 10M13 3L3 13', rain: 'M3 8h10V5h-2V3H5v2H3zM5 11v2M8 11v3M11 11v2', storm: 'M3 8h10V5h-2V3H5v2H3zM9 9l-2 3h3l-2 3',
   check: 'M2 8l4 4 8-8', pause: 'M5 3v10M11 3v10', play: 'M5 3l7 5-7 5z', up: 'M8 14V2M3 7l5-5 5 5',
-  stack: 'M2 3h12M2 7h12M2 11h9M2 15h5', help: 'M5 5V3h6v4L8 9v2M8 13v2', heart: 'M8 14L2 8V4l2-2h2l2 2 2-2h2l2 2v4z',
+  stack: 'M2 3h12M2 7h12M2 11h9M2 15h5', bell: 'M4 12V7l1-3 3-2 3 2 1 3v5M2 12h12M7 14h2', help: 'M5 5V3h6v4L8 9v2M8 13v2', heart: 'M8 14L2 8V4l2-2h2l2 2 2-2h2l2 2v4z',
   snow: 'M8 1v14M2 4l12 8M14 4L2 12', therm: 'M7 2h2v8M5 10h6v5H5z', pick: 'M2 6l3-3h6l3 3M8 3L5 15', speaker: 'M2 6h3l4-3v10l-4-3H2zM12 5v6',
   music: 'M6 12V3l8-2v9M3 12h3v3H3zM11 10h3v3h-3z', menu: 'M2 4h12M2 8h12M2 12h12', skip: 'M3 3l6 5-6 5zM12 3v10', turn: 'M13 8a5 5 0 1 1-2-4M11 1v3h3',
   wrench: 'M10 2l4 4-3 1-6 6-2-2 6-6z',
@@ -119,6 +119,7 @@ try {
     fetch('sprites.json?' + BUILD.slice(6)).then((r) => r.json()),
   ]);
   window.SPR = sprites;
+  document.documentElement.style.setProperty('--atlas', `url(atlas.png?${BUILD.slice(6)})`); // thumbnails: the same, versioned atlas
   const aw = E.atlas_w(), ah = E.atlas_h();
   const c = document.createElement('canvas'); c.width = aw; c.height = ah;
   const cx = c.getContext('2d'); cx.drawImage(img, 0, 0);
@@ -140,17 +141,17 @@ window.PG = { get E() { return E; }, UI, finale: () => showFinale(UI()) };
 const canvas = $('#view');
 const ctx = canvas.getContext('2d', { alpha: false });
 let zoom = innerWidth >= 900 ? 1.5 : 1, fbW = 0, fbH = 0, fbD = 0, imgData = null;
-// The voxel atlas has two densities: 1 (a tile is 64 px) and 2 (128 px). A tile shows 64*zoom CSS px, so the
-// framebuffer is CSS size * density / zoom. Use the hi-res density when the screen has the pixels for it and
-// the frame stays under ~3.2 MP; the browser scales the frame smoothly.
+// Pixel art: the frame is drawn at 1x (a tile is 64 px) and the browser blows it up by a whole number of device
+// pixels with nearest-neighbour (image-rendering: pixelated), so every art pixel is the same crisp square.
+// The canvas is sized to exactly that multiple, a few pixels past the window edge at most.
+const pixScale = (z) => Math.max(1, Math.round(z * Math.max(1, window.devicePixelRatio || 1)));
 function fit() {
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  let d = zoom * dpr >= 1.5 ? 2 : 1;
-  if (d === 2 && innerWidth * innerHeight * 4 / (zoom * zoom) > 3.2e6) d = 1;
-  const w = Math.ceil(innerWidth * d / zoom), h = Math.ceil(innerHeight * d / zoom);
-  if (w === fbW && h === fbH && d === fbD) return;
-  fbW = w; fbH = h; fbD = d; canvas.width = w; canvas.height = h;
-  E.set_scale(d); E.resize(w, h); imgData = ctx.createImageData(w, h);
+  const dpr = Math.max(1, window.devicePixelRatio || 1), S = pixScale(zoom);
+  const w = Math.ceil(innerWidth * dpr / S), h = Math.ceil(innerHeight * dpr / S);
+  canvas.style.width = w * S / dpr + 'px'; canvas.style.height = h * S / dpr + 'px';
+  if (w === fbW && h === fbH && fbD === 1) return;
+  fbW = w; fbH = h; fbD = 1; canvas.width = w; canvas.height = h;
+  E.set_scale(1); E.resize(w, h); imgData = ctx.createImageData(w, h);
   redraw = true; // resizing a canvas wipes it: paint it again even when no run is going
 }
 addEventListener('resize', fit);
@@ -236,19 +237,22 @@ canvas.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' &
 let mouseAt = null;
 canvas.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; });
 canvas.addEventListener('wheel', (e) => { e.preventDefault(); setZoom(zoom + (e.deltaY < 0 ? 1 : -1)); }, { passive: false });
-// Zoom steps. The voxel atlas is drawn at 2x, so zoom 1 is pixel-sharp on a retina screen and zoom 2 on a 1x
-// screen; past 2 the art only gets blurrier. Callers pass zoom +/- 1, which means one step in or out.
-const ZOOMS = [1, 1.5, 2];
+// Zoom steps, in CSS px per art pixel. Each lands on a whole number of device pixels (pixScale); a step that
+// would round to the same size as the current one is skipped. Callers pass zoom +/- 1: one step in or out.
+const ZOOMS = [1, 1.5, 2, 3];
 function setZoom(z) {
-  const k = ZOOMS.indexOf(zoom), n = z > zoom ? Math.min(ZOOMS.length - 1, k + 1) : Math.max(0, k - 1);
-  if (ZOOMS[n] === zoom) return; zoom = ZOOMS[n]; fit();
+  let k = ZOOMS.indexOf(zoom); const dir = z > zoom ? 1 : -1;
+  while (ZOOMS[k + dir] !== undefined) { k += dir; if (pixScale(ZOOMS[k]) !== pixScale(zoom)) break; }
+  if (ZOOMS[k] === zoom || pixScale(ZOOMS[k]) === pixScale(zoom)) return; zoom = ZOOMS[k]; fit();
 }
 addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'r' || e.key === 'R') { if (tool === 14) { E.rotate_tool(); E.sync_ui(); showPlacebar(); } else if (inspOpen && UI()[81] === 14) { E.rotate_sel(); E.sync_ui(); renderInspector(true); } }
-  if (e.key === 'Escape') { setTool(-1); closeInspector(); if (!$('#modal-wrap').hidden && closableModal) closeModal(); }
+  if (e.key === 'Escape') { setTool(-1); closeInspector(); bellOpen(false); if (!$('#modal-wrap').hidden && closableModal) closeModal(); }
   if (e.key === ' ') { e.preventDefault(); if (skipping) stopSkip(false); setSpeed(speed === 0 ? 1 : 0); }
   if (e.key === 'f' || e.key === 'F') startSkip();
+  if ((e.key === 'b' || e.key === 'B') && running) setDockMin(!settings.dockMin);
+  if ((e.key === 'n' || e.key === 'N') && running) bellOpen($('#notif').hidden);
   if (['1', '2', '3'].includes(e.key)) setRate([RATE_DEF, 30, RATE_MAX][+e.key - 1]);
   const pan = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] }[e.key];
   if (pan) E.pan(...pan);
@@ -259,7 +263,7 @@ addEventListener('keydown', (e) => {
 
 // ------------------------------------------------------------------ settings, music and voice
 const FM = window.ForemanFM;
-let settings = { music: true, vol: 0.55, voice: true, voiceName: '', sfx: true, rate: 0.97, daynight: true, tutorial: true };
+let settings = { music: true, vol: 0.55, voice: true, voiceName: '', sfx: true, rate: 0.97, daynight: true, tutorial: true, dockMin: false };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('pg-settings') || '{}')); } catch (_) {}
 const saveSettings = () => { try { localStorage.setItem('pg-settings', JSON.stringify(settings)); } catch (_) {} };
 FM.setVolume(settings.vol);
@@ -447,7 +451,7 @@ function checkSkip(u) {
   if (skipping.afford && u[0] >= skipping.afford) {
     const k = E.next_rung_kind(), up = E.next_rung_upgrade();
     stopSkip(true);
-    if (k >= 0) toast('You can afford the next rung', `${up ? 'Upgrade your' : 'Build a'} ${KINDS[k].name.toLowerCase()}: ${money(E.next_rung_cost())}.`, 'var(--hash)', 'unlock', 'up');
+    if (k >= 0) note('You can afford the next rung', `${up ? 'Upgrade your' : 'Build a'} ${KINDS[k].name.toLowerCase()}: ${money(E.next_rung_cost())}.`, 'var(--hash)', 'unlock', 'up');
   }
 }
 function paintSpeed() {
@@ -464,7 +468,18 @@ $('#spd').oninput = (e) => setRate(posToRate(+e.target.value));
 
 // ------------------------------------------------------------------ dock
 let tab = 'power';
-document.querySelectorAll('#tabs [data-tab]').forEach((b) => b.onclick = () => { tab = b.dataset.tab; document.querySelectorAll('#tabs [data-tab]').forEach((x) => x.setAttribute('aria-selected', x === b)); renderDock(); });
+document.querySelectorAll('#tabs [data-tab]').forEach((b) => b.onclick = () => { tab = b.dataset.tab; document.querySelectorAll('#tabs [data-tab]').forEach((x) => x.setAttribute('aria-selected', x === b)); if (settings.dockMin) setDockMin(false); renderDock(); });
+// The build list folds down to its tab row, so the map gets the room. Picking a tab opens it again.
+function setDockMin(min) {
+  settings.dockMin = min; saveSettings();
+  const d = $('#dock'), b = $('#b-dock');
+  d.classList.toggle('min', min); b.setAttribute('aria-expanded', !min);
+  b.setAttribute('aria-label', min ? 'Expand the build list' : 'Collapse the build list');
+  b.title = (min ? 'Expand' : 'Collapse') + ' the build list (B)';
+  if (min && tool >= 0) setTool(-1);
+  requestAnimationFrame(syncDockH);
+}
+$('#b-dock').onclick = () => { setDockMin(!settings.dockMin); sfx('tap'); };
 $('#b-ladder').onclick = () => openLadder();
 // map overlays
 let viewMask = 0, viewAuto = 0;
@@ -473,7 +488,7 @@ document.querySelectorAll('#views [data-view]').forEach((b) => b.onclick = () =>
 function showView(bit) { viewMask |= bit; applyView(); }
 // Layers: the map-view popover off the round button rail
 const layersOpen = (open) => { $('#layers').hidden = !open; $('#b-layers').setAttribute('aria-expanded', open); };
-$('#b-layers').onclick = (e) => { e.stopPropagation(); layersOpen($('#layers').hidden); sfx('tap'); };
+$('#b-layers').onclick = (e) => { e.stopPropagation(); bellOpen(false); layersOpen($('#layers').hidden); sfx('tap'); };
 $('#layers-x').onclick = () => layersOpen(false);
 $('#layers-x').innerHTML = ic('x');
 addEventListener('pointerdown', (e) => { if (!$('#layers').hidden && !e.target.closest('#layers,#b-layers')) layersOpen(false); });
@@ -482,7 +497,8 @@ addEventListener('pointerdown', (e) => { if (!$('#layers').hidden && !e.target.c
 function thumb(sprName, boxH, boxW = 110) {
   const r = SPR[sprName]; const [x, y, w, h] = r.length > 4 ? [r[0] + r[4], r[1] + r[5], r[6], r[7]] : r;
   const sc = Math.min(1, (boxH - 6) / h, (boxW - 6) / w);
-  return `<i style="width:${w}px;height:${h}px;background-position:-${x}px -${y}px;transform:scale(${sc});transform-origin:bottom center;margin-bottom:${Math.round(3 - h * (1 - sc) * 0)}px"></i>`;
+  // the atlas is 1x art doubled: from half size up, nearest-neighbour keeps the pixels; smaller, it would drop them
+  return `<i style="image-rendering:${sc >= 0.5 ? 'pixelated' : 'auto'};width:${w}px;height:${h}px;background-position:-${x}px -${y}px;transform:scale(${sc});transform-origin:bottom center;margin-bottom:${Math.round(3 - h * (1 - sc) * 0)}px"></i>`;
 }
 // the inspector stacks under the Foreman's note on desktop: keep its height in a CSS variable
 if (window.ResizeObserver) new ResizeObserver(() => document.documentElement.style.setProperty('--memo-h', ($('#memo').offsetHeight || 0) + 'px')).observe($('#memo'));
@@ -713,14 +729,21 @@ function positionInspector() {
 const TOAST_IC = { 'var(--alarm)': 'warn', 'var(--cash)': 'check', 'var(--btc)': 'cube', 'var(--hash)': 'bolt', 'var(--muted)': 'help', 'var(--volt)': 'bolt' };
 function toast(title, body, color = 'var(--volt)', whyKey = '', icon = '') {
   if (skipping && (color === 'var(--alarm)' || title === 'New power source')) stopSkip(color === 'var(--alarm)');
+  if (toBell) return logNote(title, body, color, whyKey, icon);
   const t = el('div', { class: 'toast', style: `--tc:${color}` }, `<span class="ti">${ic(icon || TOAST_IC[color] || 'bolt')}</span><div><b>${title}</b><span>${body}</span></div>${whyKey ? whyBtn(whyKey) : ''}`);
   $('#toasts').prepend(t); while ($('#toasts').children.length > (innerWidth < 720 ? 2 : 3)) $('#toasts').lastChild.remove();
   setTimeout(() => t.remove(), 6500);
 }
+// Things that happen in the game go to the bell. A reply to something the player just did (can't build there,
+// not enough cash, sold, repaired) still pops up for a moment next to where they're looking.
+const FEEDBACK = new Set([7, 8, 9, 10, 11, 15, 16, 19, 22, 23, 25, 28, 36, 38, 41, 42, 43, 48, 49]);
+let toBell = false;
+const note = (...a) => { toBell = true; try { toast(...a); } finally { toBell = false; } };
 function drainToasts(u) {
   const n = u[100]; if (!n) return;
-  for (let x = 0; x < n; x++) {
+  try { for (let x = 0; x < n; x++) {
     const code = u[101 + x * 2], arg = u[102 + x * 2];
+    toBell = !FEEDBACK.has(code);
     switch (code) {
       case 1: toast('Difficulty retarget', `Network difficulty ${arg >= 0 ? '+' : ''}${(arg * 100).toFixed(1)}%. ${arg > 0 ? 'Each miner now earns less.' : 'Your miners earn a bit more.'}`, arg > 0 ? 'var(--alarm)' : 'var(--cash)', 'retarget', 'gauge'); tip('retarget'); break;
       case 2: toast('Foreman bailout', `The Foreman covered you with ${money(arg)}. Don't make it a habit.`, 'var(--cash)', 'bailout', ''); break;
@@ -774,9 +797,40 @@ function drainToasts(u) {
       case 50: { const what = E.milestone_info(arg, 0), target = E.milestone_info(arg, 1); toast('Milestone reached', `${what ? (target > 1 ? 'Second' : 'First') + ' halving survived' : hash(target) + ' switched on'}. Your backers release <b>${money(E.milestone_info(arg, 2))}</b>.`, 'var(--cash)', '', 'check'); sfx('coin'); stopSkip(false); break; }
       case 34: toast('Fees back to normal', 'The mempool cleared. Blocks pay the usual fees again.', 'var(--muted)'); break;
     }
-  }
+  } } finally { toBell = false; }
   E.toasts_ack();
 }
+
+// ------------------------------------------------------------------ notifications (the bell)
+// Live alerts (renderStatus) sit at the top while their cause lasts; events are logged underneath, newest first.
+const notes = []; let unread = 0, unreadAlarm = false, liveN = 0, liveSev = '';
+function logNote(title, body, color, whyKey, icon) {
+  notes.unshift({ title, body, color, whyKey, icon: icon || TOAST_IC[color] || 'bolt', blk: running ? UI()[6] : 0 });
+  if (notes.length > 60) notes.pop();
+  if (!$('#notif').hidden) renderLog();
+  else { unread++; if (color === 'var(--alarm)') unreadAlarm = true; const b = $('#b-bell'); b.classList.remove('ring'); void b.offsetWidth; b.classList.add('ring'); }
+  updateBell();
+}
+function renderLog() {
+  $('#nlog').innerHTML = notes.length ? '<div class="nh">Events</div>' + notes.map((n) => `<div class="toast" style="--tc:${n.color}"><span class="ti">${ic(n.icon)}</span><div><b>${n.title}</b><span>${n.body}</span>${n.blk ? `<small>Block ${n.blk.toLocaleString()}</small>` : ''}</div>${n.whyKey ? whyBtn(n.whyKey) : ''}</div>`).join('') : '';
+  $('#notif-clear').hidden = !notes.length;
+  $('#nempty').hidden = !!(notes.length || statusHtml);
+}
+function updateBell() {
+  const b = $('#b-bell'), n = liveN + unread;
+  b.dataset.n = n ? (n > 99 ? '99+' : n) : '';
+  b.dataset.sev = liveSev === 'alarm' || unreadAlarm ? 'alarm' : liveSev;
+  b.setAttribute('aria-label', n ? `Notifications: ${liveN ? liveN + ' active' : ''}${liveN && unread ? ', ' : ''}${unread ? unread + ' new' : ''}` : 'Notifications');
+}
+function bellOpen(open) {
+  $('#notif').hidden = !open; $('#b-bell').setAttribute('aria-expanded', open);
+  if (open) { layersOpen(false); unread = 0; unreadAlarm = false; statusHtml = ''; renderStatus(UI()); renderLog(); updateBell(); }
+}
+$('#b-bell').onclick = (e) => { e.stopPropagation(); bellOpen($('#notif').hidden); sfx('tap'); };
+$('#notif-x').innerHTML = ic('x');
+$('#notif-x').onclick = () => bellOpen(false);
+$('#notif-clear').onclick = () => { notes.length = 0; renderLog(); sfx('tap'); };
+addEventListener('pointerdown', (e) => { if (!$('#notif').hidden && !e.target.closest('#notif,#b-bell,#why,#modal-wrap')) bellOpen(false); });
 
 // ------------------------------------------------------------------ sites (same order as SITES in data.rs)
 const SITES_UI = [
@@ -847,7 +901,7 @@ function stepsHtml(u) {
   let changed = false; for (const [id, , ok] of STEPS) if (!steps[id] && ok(u)) { steps[id] = 1; changed = true; }
   if (changed) saveSteps();
   const done = STEPS.filter(([id]) => steps[id]).length;
-  if (done === STEPS.length) { if (!steps.cheered) { steps.cheered = 1; steps.off = 1; saveSteps(); setTimeout(() => toast('First steps done', 'That\'s the loop: mine, pay for power, grow, climb the power tree. The rest is up to you.', 'var(--cash)', '', 'check'), 50); } return ''; }
+  if (done === STEPS.length) { if (!steps.cheered) { steps.cheered = 1; steps.off = 1; saveSteps(); setTimeout(() => note('First steps done', 'That\'s the loop: mine, pay for power, grow, climb the power tree. The rest is up to you.', 'var(--cash)', '', 'check'), 50); } return ''; }
   return `<div class="steps"><div class="sh"><b>First steps</b><span class="dim">${done} of ${STEPS.length}</span><button class="ib mini" data-s="steps-x" aria-label="Hide first steps">${ic('x')}</button></div>` +
     STEPS.map(([id, t]) => `<div class="stp ${steps[id] ? 'done' : ''}">${ic(steps[id] ? 'check' : 'pause')}<span>${t}</span></div>`).join('') + '</div>';
 }
@@ -1051,7 +1105,7 @@ function unlockGoal(id) {
   if (ledger[id]) return;
   const g = GOALS.find((x) => x.id === id); if (!g) return;
   ledger[id] = { at: Date.now() }; saveLedger();
-  toast('New ledger card: ' + g.t, `${g.goal} Open the ledger to read it.`, 'var(--btc)', '', 'book'); sfx('coin');
+  note('New ledger card: ' + g.t, `${g.goal} Open the ledger to read it.`, 'var(--btc)', '', 'book'); sfx('coin');
   updateLedgerBadge(); if ($('#memo').hidden) tip('ledger'); // never cut into the onboarding chain
 }
 function checkGoals(u) { for (const g of GOALS) if (!g.flag && !ledger[g.id] && g.ok(u)) unlockGoal(g.id); }
@@ -1838,9 +1892,12 @@ function renderStatus(u) {
   const live = new Set(rows.map((r) => r[3] || r[1]));
   for (const k in hushed) if (!k.startsWith('ms') && !live.has(k)) delete hushed[k];
   const xBtn = (k) => `<button class="ib mini" data-dx="${k.replace(/"/g, '&quot;')}" aria-label="Dismiss">${ic('x')}</button>`;
-  const h = rows.filter((r) => !hushed[r[3] || r[1]]).map(([c, t, b, w]) => `<div class="st ${c}"><span>${t}</span>${w ? whyBtn(w) : ''}${b}${xBtn(w || t)}</div>`).join('') + (stepsHtml(u) || milestoneHtml());
+  const shown = rows.filter((r) => !hushed[r[3] || r[1]]);
+  liveN = shown.length; liveSev = shown.some((r) => r[0] === 'alarm') ? 'alarm' : shown.some((r) => r[0] === 'warn') ? 'warn' : '';
+  updateBell();
+  const h = shown.map(([c, t, b, w]) => `<div class="st ${c}"><span>${t}</span>${w ? whyBtn(w) : ''}${b}${xBtn(w || t)}</div>`).join('') + (stepsHtml(u) || milestoneHtml());
   if (h === statusHtml) return; statusHtml = h;
-  const box = $('#status'); box.innerHTML = h; box.hidden = !h;
+  const box = $('#status'); box.innerHTML = h; box.hidden = !h; $('#nempty').hidden = !!(h || notes.length);
   box.querySelectorAll('[data-dx]').forEach((b) => b.onclick = () => { hushed[b.dataset.dx] = 1; sfx('tap'); statusHtml = null; renderStatus(UI()); });
   box.querySelectorAll('[data-s]').forEach((b) => b.onclick = () => {
     const a = b.dataset.s;
@@ -1855,6 +1912,7 @@ function renderStatus(u) {
     if (a === 'crew') { openCrew(); return; }
     if (a === 'fence') { tab = 'site'; document.querySelectorAll('#tabs [data-tab]').forEach((x) => x.setAttribute('aria-selected', x.dataset.tab === 'site')); setTool(18); }
     if (a === 'steps-x') { steps.off = 1; saveSteps(); }
+    else if (!['wake', 'clean'].includes(a)) bellOpen(false);
     sfx('tap'); statusHtml = ''; E.sync_ui(); renderStatus(UI());
   });
 }
@@ -2396,7 +2454,7 @@ $('#b-menu').onclick = () => {
 let pickDiff = 0, pickSeed = (Math.random() * 2 ** 32) >>> 0, pickSite = 0;
 try { pickSite = Math.min(5, Math.max(0, +(localStorage.getItem('pg-site') || 0))); } catch (_) {}
 function newRunScreen() {
-  running = running && false; ['#topbar', '#hud', '#pill', '#speed', '#rail', '#layers', '#dock', '#np', '#status'].forEach((s) => $(s).hidden = true); statusHtml = ''; $('#memo').hidden = true; memoResume = false; stopSpeaking(); closeInspector(); setTool(-1);
+  running = running && false; ['#topbar', '#hud', '#pill', '#speed', '#rail', '#layers', '#dock', '#np', '#notif'].forEach((s) => $(s).hidden = true); statusHtml = ''; $('#memo').hidden = true; memoResume = false; stopSpeaking(); closeInspector(); setTool(-1);
   const has = !!localStorage.getItem('pg-save');
   E.set_site(pickSite); E.preview_seed(pickSeed); redraw = true; const u = UI();
   const tr = [['River', u[30] ? 'Yes: a dam is possible' : 'None: wind opens deep geothermal directly', u[30] ? 'var(--hash)' : 'var(--alarm)'],
@@ -2415,7 +2473,7 @@ function newRunScreen() {
     <div><span class="lbl">Difficulty</span><div class="diffs" style="margin-top:6px">${DIFFS.map(([n, d], i) => `<button class="btn ${i === pickDiff ? 'on' : ''}" data-d="${i}"><span class="px" style="font-size:13px;color:${i === pickDiff ? 'var(--volt)' : 'var(--ink)'}">${n}</span><small>${d}</small></button>`).join('')}</div></div>
     <div class="choices" style="flex-direction:row;flex-wrap:wrap"><button class="btn btn-p" data-a="start" style="font-size:16px">${ic('play')}Start run</button>${has ? '<button class="btn" data-a="cont">Continue saved run</button>' : ''}${!has && localStorage.getItem('pg-save-prev') ? '<button class="btn" data-a="prev">Restore previous run</button>' : ''}</div>
     ${historyList()}
-    <span style="font-size:12px;color:var(--muted)">Plays offline once loaded. Saves stay in this browser. Voxel art made for this game. · <a href="#" data-a="donate" style="color:var(--btc)">Support the game</a> · ${BUILD}</span>`);
+    <span style="font-size:12px;color:var(--muted)">Plays offline once loaded. Saves stay in this browser. Pixel art made for this game. · <a href="#" data-a="donate" style="color:var(--btc)">Support the game</a> · ${BUILD}</span>`);
   const m = $('#modal');
   m.querySelector('[data-a=donate]').onclick = (e) => { e.preventDefault(); openDonate(newRunScreen); };
   m.querySelector('[data-a=reroll]').onclick = () => { pickSeed = (Math.random() * 2 ** 32) >>> 0; newRunScreen(); };
@@ -2453,7 +2511,7 @@ function askTutorial() {
 function afterStart() {
   try { seenTips = JSON.parse(localStorage.getItem('pg-tips') || '{}'); } catch (_) { seenTips = {}; }
   ['#topbar', '#hud', '#pill', '#speed', '#rail', '#dock'].forEach((s) => $(s).hidden = false);
-  hushed = {};
+  hushed = {}; notes.length = 0; unread = 0; unreadAlarm = false; bellOpen(false); setDockMin(!!settings.dockMin);
   overShown = false; shownEvent = -1; fit(); setSpeed(1); viewMask = 0; viewAuto = 0; applyView(); renderDock(); running = true;
 }
 

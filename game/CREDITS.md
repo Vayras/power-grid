@@ -1,8 +1,8 @@
 # Power Grid: art credits
 
-## Voxel art (current)
+## Pixel art (current)
 Every sprite the game ships (terrain, trees, buildings, people, the delivery truck) is an original voxel model in
-`tools/voxel/models.py`, rendered by `tools/voxel/vox.py`. No third-party art is in `web/atlas.png`.
+`tools/voxel/models.py`, rendered and baked into pixel art by `tools/voxel/vox.py`. No third-party art is in `web/atlas.png`.
 
 ## Weather sounds (public domain / CC0)
 `web/audio/` holds seamless loops cut from these recordings (trimmed, crossfaded, loudness-normalized, re-encoded

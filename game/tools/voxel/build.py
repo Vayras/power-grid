@@ -5,7 +5,9 @@ plus TRUCK at the end).
 The atlas is drawn at 2x the game's base tile (128x64 px per tile). Every rect, anchor and emitter is even,
 so the renderer can make the 1x atlas with a plain 2x2 box filter.
 
-    tools/voxel/.venv/bin/python tools/voxel/build.py [--sheet out.png] [--only NAME,...]
+    tools/voxel/.venv/bin/python tools/voxel/build.py [--sheet out.png] [--only NAME,...] [--style pixel|voxel]
+
+--style pixel (the default) bakes 1x pixel art, stored doubled; --style voxel the smooth supersampled renders.
 """
 import os, sys, json, time
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -21,6 +23,7 @@ def main():
     args = sys.argv[1:]
     sheet = args[args.index('--sheet') + 1] if '--sheet' in args else None
     only = set(args[args.index('--only') + 1].split(',')) if '--only' in args else None
+    if '--style' in args: vox.STYLE = args[args.index('--style') + 1]
     out = []
     t0 = time.time()
     for name, m, kind in models.all_sprites():

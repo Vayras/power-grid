@@ -13,6 +13,10 @@ the screen position of the top corner of the tile at ground level.
 import numpy as np
 from PIL import Image
 
+# Art style. 'pixel' (default): every sprite becomes 1x pixel art (a 64x32 tile), stored doubled in the 2x atlas:
+# hard sun shadows and stepped light, a small palette per sprite, dark inner contour lines and a selective
+# outline. 'voxel': the smooth, supersampled renders.
+STYLE = 'pixel'
 SSAA = 2
 TILE_W, TILE_H, TILE_Z = 128, 64, 80          # atlas px per tile along the screen diagonals, and per tile of height
 VIEW = np.array([1.0, 1.0, 0.8])              # toward the camera (null space of the projection)
@@ -60,6 +64,7 @@ class Model:
         if not mask.any(): return
         c = srgb(c)
         n = mask.sum()
+        if STYLE == 'pixel': jit *= 0.5     # flat colour areas read cleaner as pixels
         k = 1.0 + self.rng.normal(0, jit, n).astype(np.float32)
         cols = np.clip(c[None, :] * k[:, None], 0, 1)
         if var is not None:          # a second colour mixed in at random (weathering, mottling)
@@ -284,6 +289,10 @@ def render(m, catcher_margin=None, shadow_alpha=0.42, solid=False):
         ao_c = _vertex_ao(P, fx, fy, fz, face)
         ndl = max(0.0, float(n @ SUN))
         amb = 1.0 if face == 'top' else 0.78
+        if STYLE == 'pixel':   # hard shadows and stepped light: a few flat tones per face, like hand-painted pixel art
+            sun_c = (sun_c > 0.5).astype(np.float64)
+            ao_c = np.round((ao_c - 0.5) * 4) / 4 + 0.5
+            sky_c = np.maximum(0.3, np.round(sky_c * 3) / 3)
         base_lin = lin[fx, fy, fz]                        # N x 3
         glow = m.glow[fx, fy, fz]
         sx, sy, sa, sb = stamp(face, st)
@@ -341,6 +350,8 @@ def render(m, catcher_margin=None, shadow_alpha=0.42, solid=False):
     DP = np.concatenate([f[2] for f in frags])
     RGB = np.concatenate([f[3] for f in frags])
     AL = np.concatenate([f[4] for f in frags])
+    if STYLE == 'pixel':
+        return _resolve_pixel(m, PX, PY, DP, RGB, AL, solid, st)
     # origin (P of the model's origin tile at ground level) must land on a multiple of 2*SSAA so that the atlas
     # anchor is even (the half-scale atlas is a plain 2x2 box filter of the full one)
     q = 2 * SSAA
@@ -374,3 +385,78 @@ def render(m, catcher_margin=None, shadow_alpha=0.42, solid=False):
         sx_ = (ex * (x - y)) / SSAA; sy_ = (ey * (x + y) - ez * (z - zb)) / SSAA
         em.append((int(round(sx_)), int(round(sy_))))
     return im, int(ax), int(ay), em
+
+
+# ---------------------------------------------------------------- pixel-art resolve
+OUTLINE = np.array([34, 28, 46]) / 255.0       # outline ink: a deep violet, never pure black
+SHADE = np.array([40, 44, 86]) / 255.0         # inner contour lines lean the same way (cool shadows)
+SHADOW_RGB = (24, 26, 52)
+
+
+def _resolve_pixel(m, PX, PY, DP, RGB, AL, solid, st):
+    """Fragments -> 1x pixel art, returned doubled (nearest) so it drops into the 2x atlas unchanged."""
+    ex, ey, ez = st
+    q = 2 * SSAA                       # fragment grid per 1x pixel
+    x0 = (PX.min() // q) * q - 2 * q; y0 = (PY.min() // q) * q - 2 * q
+    w = ((PX.max() - x0) // q + 3) * q; h = ((PY.max() - y0) // q + 3) * q
+    body = AL >= 0.999
+    # body z-buffer at fragment resolution
+    o = np.argsort(DP[body], kind='stable')
+    bx, by = PX[body][o] - x0, PY[body][o] - y0
+    cb = np.zeros((h, w, 3), np.float32); db = np.full((h, w), -1e9, np.float32); mb = np.zeros((h, w), bool)
+    cb[by, bx] = to_srgb(aces(RGB[body][o])); db[by, bx] = DP[body][o]; mb[by, bx] = True
+    sa = np.zeros((h, w), np.float32)
+    if (~body).any():
+        np.maximum.at(sa, (PY[~body] - y0, PX[~body] - x0), AL[~body])
+    sa[mb] = 0
+    H1, W1 = h // q, w // q
+    blk = lambda a: a.reshape(H1, q, W1, q, *a.shape[2:])
+    cov = blk(mb).mean((1, 3))
+    cnt = np.maximum(1, blk(mb).sum((1, 3)))
+    col = (blk(cb * mb[..., None]).sum((1, 3))) / cnt[..., None]
+    dep = blk(db).max((1, 3))
+    shd = blk(sa).mean((1, 3))
+    B = cov > (0.02 if solid else 0.38)
+    # a small palette per sprite (ground tiles keep their own colours, so neighbouring tiles match)
+    if not solid and B.sum() > 8:
+        k = int(np.clip(B.sum() // 40, 10, 28))
+        fill = col[B].mean(0)
+        tmp = np.where(B[..., None], col, fill[None, None, :])
+        im = Image.fromarray((np.clip(tmp, 0, 1) * 255 + 0.5).astype(np.uint8), 'RGB')
+        im = im.quantize(colors=k, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
+        col = np.asarray(im, np.float32) / 255.0
+    out = np.zeros((H1, W1, 4), np.float32)
+    out[..., :3] = col; out[..., 3] = B
+    if not solid:
+        # inner contours: a pixel sitting just behind a nearer neighbour (a roof edge over a wall, a pipe in front
+        # of a tank) gets a darker, cooler tone
+        T = 3.0 * m.res / 32
+        edge = np.zeros_like(B)
+        for dy, dx in ((0, 1), (1, 0), (0, -1), (-1, 0)):
+            nb = np.roll(np.roll(B, dy, 0), dx, 1); nd = np.roll(np.roll(dep, dy, 0), dx, 1)
+            edge |= B & nb & (nd - dep > T)
+        out[edge, :3] = out[edge, :3] * 0.58 + SHADE * 0.42 * 0.5
+        # selective outline: empty pixels touching the body take a dark version of the colour they touch
+        acc = np.zeros((H1, W1, 3), np.float32); n = np.zeros((H1, W1), np.float32)
+        for dy, dx in ((0, 1), (1, 0), (0, -1), (-1, 0)):
+            nb = np.roll(np.roll(B, dy, 0), dx, 1); nc = np.roll(np.roll(out[..., :3], dy, 0), dx, 1)
+            acc += nc * nb[..., None]; n += nb
+        ring = ~B & (n > 0)
+        out[ring, :3] = (acc[ring] / n[ring][:, None]) * 0.32 + OUTLINE * 0.68
+        out[ring, 3] = 1
+        # the ground shadow: one flat, cool tone
+        sh = ~B & ~ring & (shd > 0.05)
+        out[sh, :3] = np.array(SHADOW_RGB) / 255.0; out[sh, 3] = 0.36
+    out8 = (np.clip(out, 0, 1) * 255 + 0.5).astype(np.uint8)
+    im = Image.fromarray(out8, 'RGBA')
+    ox, oy = -x0 // q, -y0 // q
+    bb = im.getbbox()
+    if bb is None: return None
+    im = im.crop(bb)
+    ax, ay = bb[0] - ox, bb[1] - oy
+    im = im.resize((im.width * 2, im.height * 2), Image.NEAREST)
+    em = []
+    for (x, y, z) in m.emit:
+        sx_ = (ex * (x - y)) / SSAA; sy_ = (ey * (x + y) - ez * (z - m.zbase)) / SSAA
+        em.append((int(round(sx_)), int(round(sy_))))
+    return im, int(ax) * 2, int(ay) * 2, em
